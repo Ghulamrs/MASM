@@ -41,6 +41,13 @@ private:
     bool done;
     int proc;
     bool proc_private;                  /* OPTION PROC:PRIVATE: PROCs are Static unless PUBLIC */
+    bool frame;                         /* the open PROC is a PROC FRAME */
+    unsigned long frame_start;
+    int frame_reg;                      /* .SETFRAME register and offset/16 */
+    int frame_off;
+    int prolog_end;                     /* bytes of prologue, or -1 until .ENDPROLOG */
+    std::vector<std::vector<unsigned char> > codes;  /* unwind codes, in the order written */
+    int xdatasym;                       /* the $xdatasym symbol ml64 relocates .pdata against, or -1 */
     std::string directives;             /* INCLUDELIB: the .drectve text, written at END */
     std::vector<int> segs;              /* sections enclosing the open SEGMENT blocks */
     std::vector<std::string> segnames;  /* their names as written, for ENDS */
@@ -48,6 +55,8 @@ private:
     bool directive(Unit &u, std::vector<Token> &t);
     void segment(Unit &u, const std::vector<Token> &t);
     void option(Unit &u, const std::vector<Token> &t);
+    void unwind(Unit &u, const std::vector<Token> &t, const std::string &w);
+    void end_frame(Unit &u);
     void data(Unit &u, const std::vector<Token> &t, size_t from, int width);
     bool operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b, Operand &o);
     bool memory(Unit &u, const std::vector<Token> &t, const std::vector<size_t> &ranges, Operand &o);

@@ -52,7 +52,9 @@ uninitialised `C0000080`, plus the alignment field), `END`, `PUBLIC`, `EXTERN`/`
 `OPTION DOTNAME | NOSCOPED | PROC:PRIVATE | NOKEYWORD:<...> | CASEMAP:NONE | PROLOGUE:NONE | EPILOGUE:NONE`
 (PROC:PRIVATE makes PROCs Static unless PUBLIC, as ml64; the others name what happens anyway),
 `INCLUDELIB name` (a `.drectve` section with `/DEFAULTLIB:name`, as ml64 writes it), `TITLE`/`SUBTITLE`/`.LIST`
-and the like (ignored), `name PROC [PUBLIC|PRIVATE]`,
+and the like (ignored), `name PROC [PUBLIC|PRIVATE] [FRAME]` with `.PUSHREG`, `.ALLOCSTACK`, `.SETFRAME`,
+`.SAVEREG`, `.SAVEXMM128`, `.PUSHFRAME` and `.ENDPROLOG` (the UNWIND_INFO goes to `.xdata` and the
+RUNTIME_FUNCTION to `.pdata`, relocated against the PROC and one Static `$xdatasym` exactly as ml64 writes them),
 `name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n`, `ORG $+n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
 labels as `DD`/`DQ` values (`DQ v+8` keeps the addend in place, as COFF does), `DD IMAGEREL label`
 (ADDR32NB), and label differences `DB L2-L1` (folded when both are known, written at the end otherwise).
@@ -87,5 +89,5 @@ form (`8B`, `03`, ...). Stage 2 begins with this ml64 comparison.
 ## Next
 
 1. Study the Compiler-C / Compiler-S / C++ / Compiler++ generators and their `.asm` output; extend the subset to match.
-2. Short jumps, SSE (floats), `PROC FRAME` and unwind directives (`.pdata`/`.xdata`).
+2. Short jumps, SSE (floats).
 3. C6000 target and TI ELF writer.

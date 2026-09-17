@@ -1,4 +1,5 @@
 #include "x64.h"
+#include <cstdlib>
 
 struct RegName {
     const char *name;
@@ -73,7 +74,8 @@ static void split_items(const std::vector<Token> &t, size_t from, std::vector<si
     cuts.push_back(t.size() + 1);
 }
 
-X64Target::X64Target() : done(false), proc(-1), proc_private(false)
+X64Target::X64Target() : done(false), proc(-1), proc_private(false), frame(false), frame_start(0),
+    frame_reg(0), frame_off(0), prolog_end(-1), xdatasym(-1)
 {
 }
 
@@ -143,6 +145,11 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     }
     if (w == "OPTION") {
         option(u, t);
+        return true;
+    }
+    if (w == ".PUSHREG" || w == ".ALLOCSTACK" || w == ".SETFRAME" || w == ".SAVEREG" ||
+        w == ".SAVEXMM128" || w == ".PUSHFRAME" || w == ".ENDPROLOG") {
+        unwind(u, t, w);
         return true;
     }
     if (w == "INCLUDELIB") {
@@ -248,24 +255,43 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     if (w2 == "PROC") {
         if (proc >= 0) { u.error("nested PROC"); return true; }
         int global = proc_private ? 0 : 1;
+        bool is_frame = false;
         for (size_t k = 2; k < t.size(); k++) {
             if (is_word(t, k, "PUBLIC")) global = 1;
             else if (is_word(t, k, "PRIVATE")) global = 0;
+            else if (is_word(t, k, "FRAME") && k + 1 == t.size()) is_frame = true;
+            else if (is_word(t, k, "FRAME")) { u.error("PROC FRAME:handler is not supported in this version"); return true; }
             else { u.error("PROC attributes are not supported in this version"); return true; }
         }
         Section *s = u.cur();
         if (!s) return true;
         if (!s->code) { u.error("PROC outside a code section"); return true; }
+        if (is_frame) {
+            /* ml64 opens .pdata and .xdata at the first PROC FRAME, in that order */
+            int save = u.current;
+            u.section(".pdata", false, false, true, 4);
+            u.section(".xdata", false, false, true, 8);
+            u.current = save;
+        }
         if (!u.define(t[0].text)) return true;
         proc = u.find(t[0].text);
         u.symbols[proc].function = true;
         if (global) u.symbols[proc].bind = B_GLOBAL;
+        frame = is_frame;
+        frame_start = u.here();
+        frame_reg = 0;
+        frame_off = 0;
+        prolog_end = -1;
+        codes.clear();
         return true;
     }
     if (w2 == "ENDP") {
         if (proc < 0 || u.symbols[proc].name != t[0].text)
             u.error("ENDP does not match PROC");
+        else if (frame)
+            end_frame(u);
         proc = -1;
+        frame = false;
         return true;
     }
     if (w2 == "EQU") {
@@ -332,6 +358,122 @@ void X64Target::option(Unit &u, const std::vector<Token> &t)
             k++;
         }
     }
+}
+
+static void slot16(std::vector<unsigned char> &e, unsigned long v)
+{
+    e.push_back((unsigned char)(v & 0xFF));
+    e.push_back((unsigned char)((v >> 8) & 0xFF));
+}
+
+/* the unwind directives of a PROC FRAME: each becomes an UNWIND_CODE at the prologue offset
+   reached so far, with ml64's operation numbers and large forms */
+void X64Target::unwind(Unit &u, const std::vector<Token> &t, const std::string &w)
+{
+    if (proc < 0 || !frame) { u.error(w + " needs a PROC FRAME"); return; }
+    if (prolog_end >= 0) { u.error(w + " after .ENDPROLOG"); return; }
+    unsigned long off = u.here() - frame_start;
+    if (off > 255) { u.error("prologue longer than 255 bytes"); return; }
+    if (w == ".ENDPROLOG") {
+        if (t.size() != 1) { u.error("unexpected text after .ENDPROLOG"); return; }
+        prolog_end = (int)off;
+        return;
+    }
+    std::vector<unsigned char> e;
+    e.push_back((unsigned char)off);
+    std::string err;
+    long long n = 0;
+    const RegName *r = t.size() > 1 ? find_reg(t[1]) : 0;
+    if (w == ".PUSHFRAME") {
+        bool code = t.size() == 2 && is_word(t, 1, "CODE");
+        if (t.size() != 1 && !code) { u.error(".PUSHFRAME takes only CODE"); return; }
+        e.push_back((unsigned char)(10 | (code ? 0x10 : 0)));
+    } else if (w == ".ALLOCSTACK") {
+        if (!eval_const(u, t, 1, t.size(), n, err)) { u.error(err); return; }
+        if (n <= 0 || n % 8) { u.error(".ALLOCSTACK needs a positive multiple of 8"); return; }
+        if (n <= 128) {
+            e.push_back((unsigned char)(2 | ((n / 8 - 1) << 4)));
+        } else if (n / 8 <= 0xFFFF) {
+            e.push_back(1);
+            slot16(e, (unsigned long)(n / 8));
+        } else {
+            e.push_back(1 | 0x10);
+            slot16(e, (unsigned long)n & 0xFFFF);
+            slot16(e, ((unsigned long)n >> 16) & 0xFFFF);
+        }
+    } else if (w == ".PUSHREG") {
+        if (t.size() != 2 || !r || r->size != 64) { u.error(".PUSHREG needs a 64-bit register"); return; }
+        e.push_back((unsigned char)(r->num << 4));
+    } else if (w == ".SETFRAME") {
+        if (t.size() < 4 || !r || r->size != 64 || !is_punct(t, 2, ',')) { u.error(".SETFRAME needs a 64-bit register and an offset"); return; }
+        if (!eval_const(u, t, 3, t.size(), n, err)) { u.error(err); return; }
+        if (n < 0 || n > 240 || n % 16) { u.error(".SETFRAME offset must be a multiple of 16 up to 240"); return; }
+        e.push_back((unsigned char)(3 | (r->num << 4)));
+        frame_reg = r->num;
+        frame_off = (int)(n / 16);
+    } else if (w == ".SAVEREG" || w == ".SAVEXMM128") {
+        bool xmm = w == ".SAVEXMM128";
+        int num = -1;
+        if (t.size() > 1 && xmm) {
+            std::string x = upper(t[1].text);
+            if (x.size() > 3 && x.compare(0, 3, "XMM") == 0) num = atoi(x.c_str() + 3);
+            if (num < 0 || num > 15) num = -1;
+        } else if (r && r->size == 64) {
+            num = r->num;
+        }
+        if (t.size() < 4 || num < 0 || !is_punct(t, 2, ',')) { u.error(w + " needs a register and an offset"); return; }
+        if (!eval_const(u, t, 3, t.size(), n, err)) { u.error(err); return; }
+        int unit = xmm ? 16 : 8;
+        if (n < 0 || n % unit) { u.error(w + " offset must be a multiple of " + (xmm ? "16" : "8")); return; }
+        if (n / unit <= 0xFFFF) {
+            e.push_back((unsigned char)((xmm ? 8 : 4) | (num << 4)));
+            slot16(e, (unsigned long)(n / unit));
+        } else {
+            e.push_back((unsigned char)((xmm ? 9 : 5) | (num << 4)));
+            slot16(e, (unsigned long)n & 0xFFFF);
+            slot16(e, ((unsigned long)n >> 16) & 0xFFFF);
+        }
+    }
+    codes.push_back(e);
+}
+
+/* ENDP of a PROC FRAME: the UNWIND_INFO into .xdata (version 1, codes last-first, padded to an
+   even count) and the RUNTIME_FUNCTION into .pdata, relocated as ml64 does: ADDR32NB on the PROC
+   for start and end (the size in place) and on $xdatasym with the entry's offset in place */
+void X64Target::end_frame(Unit &u)
+{
+    if (prolog_end < 0) { u.error("PROC FRAME without .ENDPROLOG"); return; }
+    unsigned long size = u.here() - frame_start;
+    std::vector<unsigned char> x;
+    unsigned count = 0;
+    for (size_t i = 0; i < codes.size(); i++)
+        count += (unsigned)codes[i].size() / 2;
+    if (count > 255) { u.error("too many unwind codes"); return; }
+    x.push_back(1);
+    x.push_back((unsigned char)prolog_end);
+    x.push_back((unsigned char)count);
+    x.push_back((unsigned char)(frame_reg | (frame_off << 4)));
+    for (size_t i = codes.size(); i-- > 0; )
+        x.insert(x.end(), codes[i].begin(), codes[i].end());
+    if (count & 1) { x.push_back(0); x.push_back(0); }
+
+    int save = u.current;
+    u.section(".xdata", false, false, true, 8);
+    unsigned long xoff = u.here();
+    if (xdatasym < 0) {
+        if (!u.define("$xdatasym")) { u.current = save; return; }
+        xdatasym = u.find("$xdatasym");
+    }
+    for (size_t i = 0; i < x.size(); i++)
+        u.emit8(x[i]);
+    u.section(".pdata", false, false, true, 4);
+    u.fixup(u.here(), proc, R_ADDR32NB);
+    u.emit32(0);
+    u.fixup(u.here(), proc, R_ADDR32NB);
+    u.emit32(size);
+    u.fixup(u.here(), xdatasym, R_ADDR32NB);
+    u.emit32(xoff - (unsigned long)u.symbols[xdatasym].value);
+    u.current = save;
 }
 
 /* name SEGMENT [READONLY] [ALIGN(n)] ['CODE'|'DATA'] ... name ENDS; blocks nest, and the classic
