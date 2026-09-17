@@ -23,9 +23,11 @@ static bool name_char(char c, bool first)
     return isdigit((unsigned char)c) != 0;
 }
 
-static bool number(const std::string &s, long long &v)
+/* a number: decimal, nnH, nnB; false when malformed or past 2^64 (ml64's A2071) */
+static bool number(const std::string &s, long long &v, bool &large)
 {
     int base = 10;
+    large = false;
     std::string d = s;
     char last = (char)toupper((unsigned char)d[d.size() - 1]);
     if (last == 'H') { base = 16; d.erase(d.size() - 1); }
@@ -41,6 +43,10 @@ static bool number(const std::string &s, long long &v)
         else return false;
         if (k >= base)
             return false;
+        if (r > (~0ULL - (unsigned long long)k) / (unsigned long long)base) {
+            large = true;
+            return false;
+        }
         r = r * base + k;
     }
     v = (long long)r;
@@ -70,8 +76,9 @@ bool split_line(const std::string &src, std::vector<Token> &out, std::string &er
             while (i < n && isalnum((unsigned char)src[i])) i++;
             t.kind = T_NUM;
             t.text = src.substr(s, i - s);
-            if (!number(t.text, t.value)) {
-                err = "bad number '" + t.text + "'";
+            bool large;
+            if (!number(t.text, t.value, large)) {
+                err = (large ? "number too large '" : "bad number '") + t.text + "'";
                 return false;
             }
             t.wide = (unsigned long long)t.value >= 0x100000000ULL;

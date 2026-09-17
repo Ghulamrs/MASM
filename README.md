@@ -76,6 +76,8 @@ displacement, as ml64 makes them), `OFFSET label` into a 64-bit register, and ch
 
 Notes:
 - Symbols are case-sensitive; keywords are not.
+- Expressions are evaluated with explicit stacks, so nesting is limited by memory, not the thread's stack;
+  a number of 2^64 or more is refused (ml64's A2071).
 - `PROC` names are public, as in MASM, unless `OPTION PROC:PRIVATE` or `name PROC PRIVATE` says otherwise.
 - Relative jumps are always the 32-bit form; short jumps come in stage 2.
 
