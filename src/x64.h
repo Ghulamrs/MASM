@@ -39,8 +39,11 @@ public:
 private:
     bool done;
     int proc;
+    std::vector<int> segs;              /* sections enclosing the open SEGMENT blocks */
+    std::vector<std::string> segnames;  /* their names as written, for ENDS */
 
     bool directive(Unit &u, std::vector<Token> &t);
+    void segment(Unit &u, const std::vector<Token> &t);
     void data(Unit &u, const std::vector<Token> &t, size_t from, int width);
     bool operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b, Operand &o);
     bool memory(Unit &u, const std::vector<Token> &t, size_t a, size_t b, Operand &o);

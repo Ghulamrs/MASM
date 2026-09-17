@@ -22,7 +22,10 @@ struct Reloc {
 
 struct Section {
     std::string name;
-    bool code;
+    bool code;          /* executable; instructions allowed */
+    bool bss;           /* uninitialised: size only, no bytes in the object */
+    bool readonly;
+    int align;          /* 1, 2, 4, ... 8192 */
     std::vector<unsigned char> bytes;
     std::vector<Reloc> relocs;
 };
@@ -59,7 +62,7 @@ public:
     std::vector<std::string> errors;
 
     void error(const std::string &msg);
-    int section(const std::string &name, bool code);
+    int section(const std::string &name, bool code, bool bss, bool readonly, int align);
     Section *cur();
     unsigned long here();
 

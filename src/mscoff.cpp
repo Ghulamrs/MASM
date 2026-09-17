@@ -1,4 +1,6 @@
 #include "mscoff.h"
+#include <cstdio>
+#include <cstring>
 #include <fstream>
 
 typedef std::vector<unsigned char> Bytes;
@@ -25,6 +27,33 @@ static void name8(Bytes &b, const std::string &name, Bytes &strings)
     for (size_t i = 0; i < name.size(); i++)
         u8(strings, (unsigned char)name[i]);
     u8(strings, 0);
+}
+
+/* section header name: 8 bytes, or /offset into the string table when longer */
+static void section_name8(Bytes &b, const std::string &name, Bytes &strings)
+{
+    if (name.size() <= 8) {
+        name8(b, name, strings);
+        return;
+    }
+    char buf[16];
+    snprintf(buf, sizeof buf, "/%u", (unsigned)(strings.size() + 4));
+    for (size_t i = 0; i < 8; i++)
+        u8(b, i < strlen(buf) ? (unsigned char)buf[i] : 0);
+    for (size_t i = 0; i < name.size(); i++)
+        u8(strings, (unsigned char)name[i]);
+    u8(strings, 0);
+}
+
+/* IMAGE_SCN_* flags as ml64 sets them: code 60000020, data C0000040, read-only 40000040,
+   uninitialised C0000080, plus the alignment field */
+static unsigned long characteristics(const Section &s)
+{
+    unsigned long c = s.code ? 0x60000020UL : s.bss ? 0xC0000080UL : s.readonly ? 0x40000040UL : 0xC0000040UL;
+    int a = 0;
+    while ((1 << a) < s.align)
+        a++;
+    return c | ((unsigned long)(a + 1) << 20);
 }
 
 static unsigned reloc_type(RelKind k)
@@ -61,7 +90,7 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
     for (size_t i = 0; i < nsec; i++) {
         const Section &s = u.sections[i];
         header_at[i] = out.size();
-        name8(out, s.name, strings);
+        section_name8(out, s.name, strings);
         u32(out, 0);
         u32(out, 0);
         u32(out, (unsigned long)s.bytes.size());
@@ -70,7 +99,7 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
         u32(out, 0);
         u16(out, (unsigned)s.relocs.size());
         u16(out, 0);
-        u32(out, s.code ? 0x60500020UL : 0xC0500040UL);
+        u32(out, characteristics(s));
     }
 
     for (size_t i = 0; i < nsec; i++) {
@@ -79,7 +108,7 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
             err = "too many relocations in " + s.name;
             return false;
         }
-        if (!s.bytes.empty()) {
+        if (!s.bytes.empty() && !s.bss) {
             set32(out, header_at[i] + 20, (unsigned long)out.size());
             out.insert(out.end(), s.bytes.begin(), s.bytes.end());
         }

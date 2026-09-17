@@ -45,7 +45,10 @@ register and opcode tables are `const`. Errors are stored per job and printed af
 
 ## Accepted in this version
 
-Directives: `.CODE`, `.DATA`, `END`, `PUBLIC`, `EXTERN`/`EXTRN` (`name:PROC`, `name:QWORD`),
+Directives: `.CODE`, `.DATA`, `name SEGMENT [READONLY] [ALIGN(n)] ['CODE'|'DATA'] ... name ENDS` (blocks
+nest inside `.CODE`/`.DATA`; `_TEXT`, `_DATA`, `CONST` and `_BSS` name the sections the dotted directives
+open; the object carries ml64's characteristics: code `60000020`, data `C0000040`, READONLY `40000040`,
+uninitialised `C0000080`, plus the alignment field), `END`, `PUBLIC`, `EXTERN`/`EXTRN` (`name:PROC`, `name:QWORD`),
 `name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
 and labels as `DD`/`DQ` values.
 

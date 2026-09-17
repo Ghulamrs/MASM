@@ -12,7 +12,7 @@ void Unit::error(const std::string &msg)
     errors.push_back(buf + msg);
 }
 
-int Unit::section(const std::string &name, bool code)
+int Unit::section(const std::string &name, bool code, bool bss, bool readonly, int align)
 {
     for (size_t i = 0; i < sections.size(); i++)
         if (sections[i].name == name) {
@@ -22,6 +22,9 @@ int Unit::section(const std::string &name, bool code)
     Section s;
     s.name = name;
     s.code = code;
+    s.bss = bss;
+    s.readonly = readonly;
+    s.align = align;
     sections.push_back(s);
     current = (int)sections.size() - 1;
     return current;

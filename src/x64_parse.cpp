@@ -124,11 +124,13 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     if (w == ".CODE" || w == ".DATA") {
         if (t.size() != 1) u.error("unexpected text after " + w);
         if (proc >= 0) u.error("section change inside PROC");
-        u.section(w == ".CODE" ? ".text" : ".data", w == ".CODE");
+        if (!segs.empty()) u.error("SEGMENT without ENDS");
+        u.section(w == ".CODE" ? ".text" : ".data", w == ".CODE", false, false, 16);
         return true;
     }
     if (w == "END") {
         if (proc >= 0) u.error("PROC without ENDP");
+        if (!segs.empty()) u.error("SEGMENT without ENDS");
         done = true;
         return true;
     }
@@ -192,12 +194,28 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
         return false;
 
     std::string w2 = upper(t[1].text);
+    if (w2 == "SEGMENT") {
+        segment(u, t);
+        return true;
+    }
+    if (w2 == "ENDS") {
+        if (t.size() != 2) u.error("unexpected text after ENDS");
+        else if (segs.empty()) u.error("ENDS without SEGMENT");
+        else if (segnames.back() != t[0].text) u.error("ENDS does not match SEGMENT " + segnames.back());
+        else {
+            if (proc >= 0) u.error("PROC without ENDP");
+            u.current = segs.back();
+            segs.pop_back();
+            segnames.pop_back();
+        }
+        return true;
+    }
     if (w2 == "PROC") {
         if (proc >= 0) { u.error("nested PROC"); return true; }
         if (t.size() > 2) u.error("PROC attributes are not supported in this version");
         Section *s = u.cur();
         if (!s) return true;
-        if (!s->code) { u.error("PROC outside .CODE"); return true; }
+        if (!s->code) { u.error("PROC outside a code section"); return true; }
         if (!u.define(t[0].text)) return true;
         proc = u.find(t[0].text);
         u.symbols[proc].function = true;
@@ -226,6 +244,56 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     return false;
 }
 
+/* name SEGMENT [READONLY] [ALIGN(n)] ['CODE'|'DATA'] ... name ENDS; blocks nest, and the classic
+   _TEXT, _DATA, CONST and _BSS are the sections .CODE, .DATA, .CONST and .DATA? open */
+void X64Target::segment(Unit &u, const std::vector<Token> &t)
+{
+    std::string name = t[0].text;
+    std::string up = upper(name);
+    bool code = false;
+    bool bss = false;
+    bool readonly = false;
+    int align = 16;
+    if (up == "_TEXT") { name = ".text"; code = true; }
+    else if (up == "_DATA") name = ".data";
+    else if (up == "CONST") { name = ".rdata"; readonly = true; }
+    else if (up == "_BSS") { name = ".bss"; bss = true; }
+    size_t k = 2;
+    while (k < t.size()) {
+        if (is_word(t, k, "READONLY")) { readonly = true; k++; }
+        else if (is_word(t, k, "ALIGN") && is_punct(t, k + 1, '(') && k + 3 < t.size() &&
+                 t[k + 2].kind == T_NUM && is_punct(t, k + 3, ')')) {
+            align = t[k + 2].value > 8192 ? 0 : (int)t[k + 2].value;
+            k += 4;
+        }
+        else if (is_word(t, k, "BYTE")) { align = 1; k++; }
+        else if (is_word(t, k, "WORD")) { align = 2; k++; }
+        else if (is_word(t, k, "DWORD")) { align = 4; k++; }
+        else if (is_word(t, k, "PARA")) { align = 16; k++; }
+        else if (is_word(t, k, "PAGE")) { align = 256; k++; }
+        else if (t[k].kind == T_STR) {
+            std::string cls = upper(t[k].text);
+            if (cls == "CODE") code = true;
+            else if (cls == "BSS") bss = true;
+            else if (cls != "DATA" && cls != "CONST") { u.error("unknown segment class '" + t[k].text + "'"); return; }
+            k++;
+        }
+        else { u.error("bad SEGMENT attribute '" + t[k].text + "'"); return; }
+    }
+    if (align <= 0 || (align & (align - 1))) { u.error("SEGMENT alignment must be a power of two up to 8192"); return; }
+    if (proc >= 0) { u.error("SEGMENT inside PROC"); return; }
+    segs.push_back(u.current);
+    segnames.push_back(t[0].text);
+    u.section(name, code, bss, readonly, align);
+}
+
+static size_t dup_at(const std::vector<Token> &t, size_t a, size_t b)
+{
+    size_t dup = a;
+    while (dup < b && !is_word(t, dup, "DUP")) dup++;
+    return dup;
+}
+
 static void put(Unit &u, int width, long long v)
 {
     if (width == 1) u.emit8((unsigned)v);
@@ -244,7 +312,8 @@ static bool fits(int width, long long v)
 
 void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int width)
 {
-    if (!u.cur())
+    Section *sec = u.cur();
+    if (!sec)
         return;
     if (from >= t.size()) {
         u.error("value expected");
@@ -265,14 +334,17 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
             put(u, width, 0);
             continue;
         }
+        if (sec->bss && !(dup_at(t, a, b) < b && dup_at(t, a, b) + 4 == b && t[dup_at(t, a, b) + 2].text == "?")) {
+            u.error("initialised data in an uninitialised section");
+            return;
+        }
         if (width == 1 && b - a == 1 && t[a].kind == T_STR) {
             if (t[a].text.empty()) u.error("empty string");
             for (size_t k = 0; k < t[a].text.size(); k++)
                 u.emit8((unsigned char)t[a].text[k]);
             continue;
         }
-        size_t dup = a;
-        while (dup < b && !is_word(t, dup, "DUP")) dup++;
+        size_t dup = dup_at(t, a, b);
         if (dup < b) {
             long long count;
             if (!eval(u, t, a, dup, count, err)) { u.error(err); return; }
