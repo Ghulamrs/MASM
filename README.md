@@ -26,7 +26,7 @@ Still to come: `c6x_parse.cpp`, `c6x_encode.cpp` (C6000 target) and `elf.cpp` (T
 Mac / Linux:
 
 ```
-g++ -std=c++14 -O2 -pthread src/*.cpp -o build/asm
+mkdir -p build && g++ -std=c++14 -O2 -pthread src/*.cpp -o build/asm
 ```
 
 Visual Studio 2022: open the folder (CMakeLists.txt), or add `src/*.cpp` to a console project with C++14 selected.
