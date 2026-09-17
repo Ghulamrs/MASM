@@ -13,7 +13,7 @@ struct Token {
     bool wide;      /* a number of 2^32 or more: MOV r64 takes the 64-bit immediate for it, as ml64 */
 };
 
-enum RelKind { R_REL32, R_ADDR64, R_ADDR32, R_ADDR32NB, R_DIFF };
+enum RelKind { R_REL32, R_REL8, R_ADDR64, R_ADDR32, R_ADDR32NB, R_DIFF };
 
 struct Reloc {
     unsigned long offset;
@@ -45,6 +45,9 @@ struct Symbol {
     int section;
     long long value;
     int line;
+    int pass;       /* the pass that defined it (a second definition in one pass is an error) */
+    int prev_section;   /* where the previous pass put it: the layout has settled when nothing moved */
+    long long prev_value;
 };
 
 struct Fixup {
@@ -54,6 +57,7 @@ struct Fixup {
     int sub;        /* R_DIFF: the label subtracted */
     int width;      /* R_DIFF: bytes to write */
     RelKind kind;
+    bool branch;    /* a CALL, JMP or Jcc: resolved here when the target is in the section, as ml64 does */
     int line;
 };
 
@@ -69,17 +73,23 @@ struct Value {
     bool wide;      /* a literal of 2^32 or more took part */
 };
 
+class Target;
+
 class Unit {
 public:
     Unit();
 
     int line;
+    int pass;
     int current;
+    std::vector<unsigned long> prev_sizes;  /* the sections' sizes in the previous pass */
     std::vector<Section> sections;
     std::vector<Symbol> symbols;
     std::vector<Fixup> fixups;
     std::vector<std::string> errors;
 
+    void begin_pass(int n);
+    bool moved() const;
     void error(const std::string &msg);
     int section(const std::string &name, bool code, bool bss, bool readonly, int align);
     Section *cur();
@@ -98,7 +108,7 @@ public:
     void fixup(unsigned long at, int sym, RelKind kind);
     void difference(unsigned long at, int sym, int sub, int width);
 
-    void resolve();
+    void resolve(const Target &t);
 };
 
 bool split_line(const std::string &src, std::vector<Token> &out, std::string &err);
@@ -108,11 +118,17 @@ bool eval(Unit &u, const std::vector<Token> &t, size_t from, size_t to, Value &v
 bool eval_const(Unit &u, const std::vector<Token> &t, size_t from, size_t to, long long &v, std::string &err);
 bool located(const Unit &u, const Value &x, int &sec, long long &off);
 
+/* a target assembles one statement at a time and is run over the source until the layout settles:
+   begin_pass resets it, again says whether a choice it made (a jump's width) changed this pass,
+   and resolve_here does the target's PC-relative arithmetic for a fixup it can settle in place */
 class Target {
 public:
     virtual ~Target() {}
+    virtual void begin_pass(int pass) = 0;
     virtual void statement(Unit &u, std::vector<Token> &t) = 0;
     virtual bool finished() const = 0;
+    virtual bool again() const = 0;
+    virtual bool resolve_here(const Unit &u, const Fixup &f, const Symbol &s, long long &value, int &width) const = 0;
 };
 
 class ObjWriter {

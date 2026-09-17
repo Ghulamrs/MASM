@@ -24,23 +24,41 @@ bool Assembler::run()
         unit.errors.push_back("cannot open " + input);
         return false;
     }
+    std::vector<std::string> lines;
     std::string text;
-    std::vector<Token> tokens;
-    while (!target->finished() && std::getline(f, text)) {
-        unit.line++;
+    while (std::getline(f, text)) {
         if (!text.empty() && text[text.size() - 1] == '\r')
             text.erase(text.size() - 1);
-        std::string err;
-        if (!split_line(text, tokens, err)) {
-            unit.error(err);
-            continue;
-        }
-        if (!tokens.empty())
-            target->statement(unit, tokens);
+        lines.push_back(text);
     }
-    if (!target->finished())
-        unit.error("END expected");
-    unit.resolve();
+
+    /* passes until the layout settles: the first sees a forward jump as short and a forward
+       label as untyped, the next knows every label from the pass before, and one more confirms
+       nothing moved; a jump only ever grows, so this ends */
+    std::vector<Token> tokens;
+    for (int pass = 1; ; pass++) {
+        unit.begin_pass(pass);
+        target->begin_pass(pass);
+        for (size_t i = 0; i < lines.size() && !target->finished(); i++) {
+            unit.line = (int)i + 1;
+            std::string err;
+            if (!split_line(lines[i], tokens, err)) {
+                unit.error(err);
+                continue;
+            }
+            if (!tokens.empty())
+                target->statement(unit, tokens);
+        }
+        if (!target->finished())
+            unit.error("END expected");
+        unit.resolve(*target);
+        if (!target->again() && !unit.moved())
+            break;
+        if (pass >= 200) {
+            unit.error("the layout did not settle in 200 passes");
+            break;
+        }
+    }
     if (!unit.errors.empty())
         return false;
     std::string err;

@@ -79,7 +79,10 @@ Notes:
 - Expressions are evaluated with explicit stacks, so nesting is limited by memory, not the thread's stack;
   a number of 2^64 or more is refused (ml64's A2071).
 - `PROC` names are public, as in MASM, unless `OPTION PROC:PRIVATE` or `name PROC PRIVATE` says otherwise.
-- Relative jumps are always the 32-bit form; short jumps come in stage 2.
+- The source is assembled in passes until the layout settles: a jump to a label in reach takes the
+  8-bit form (`SHORT` forces it, `NEAR PTR` the 32-bit form), a forward `EQU` or label type is known on
+  the second pass, and a jump only ever widens, so the passes end. A `CALL`/`JMP`/`Jcc` to its own section
+  is settled in the object; any other RIP-relative reference is a relocation, as ml64 leaves it.
 
 ## Checking against ml64 on Windows
 
@@ -97,5 +100,4 @@ form (`8B`, `03`, ...). Stage 2 begins with this ml64 comparison.
 ## Next
 
 1. Study the Compiler-C / Compiler-S / C++ / Compiler++ generators and their `.asm` output; extend the subset to match.
-2. Short jumps.
-3. C6000 target and TI ELF writer.
+2. C6000 target and TI ELF writer.

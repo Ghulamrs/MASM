@@ -155,16 +155,24 @@ static void emit(Unit &u, const Code &c)
         u.fixup(at + c.disp_at, c.sym, c.kind);
 }
 
-static void rel32(Unit &u, int prefix, unsigned op, int sym)
+/* a branch with a 32-bit displacement (E8, E9, 0F 8x) or an 8-bit one (EB, 7x) */
+static void branch(Unit &u, int prefix, unsigned op, const Operand &o, int width)
 {
     Code c;
     start(c);
     if (prefix >= 0) put(c, prefix);
     put(c, op);
     c.disp_at = c.n;
-    c.sym = sym;
-    put32(c, 0);
+    c.sym = o.sym;
+    if (width == 1) {
+        c.kind = R_REL8;
+        put(c, (unsigned)o.value & 0xFF);
+    } else {
+        put32(c, o.value);
+    }
     emit(u, c);
+    if (!u.fixups.empty())
+        u.fixups.back().branch = true;
 }
 
 struct Name {
@@ -601,7 +609,9 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         Operand &o = ops[0];
         if (o.kind == O_MEM && o.label && (o.near || o.size == 0)) {
             /* a code label, or one not typed yet: a direct call or jump */
-            rel32(u, -1, call ? 0xE8 : 0xE9, o.sym);
+            if (call) branch(u, -1, 0xE8, o, 4);
+            else if (jump_width(u, o) == 1) branch(u, -1, 0xEB, o, 1);
+            else branch(u, -1, 0xE9, o, 4);
             return;
         }
         /* a data label or QWORD PTR: through the qword, FF /2 or FF /4, as ml64 */
@@ -617,7 +627,8 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
             u.error(name + " needs a label");
             return;
         }
-        rel32(u, 0x0F, 0x80 + k, ops[0].sym);
+        if (jump_width(u, ops[0]) == 1) branch(u, -1, 0x70 + k, ops[0], 1);
+        else branch(u, 0x0F, 0x80 + k, ops[0], 4);
         return;
     }
 

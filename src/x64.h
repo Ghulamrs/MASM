@@ -20,6 +20,8 @@ struct Operand {
     bool wide;      /* an immediate spelled with 2^32 or more (MOV r64 takes the 64-bit form) */
     bool ptr;       /* the size was written as a PTR (not taken from the label's type) */
     bool near;      /* a code label (a NEAR label or PROC): its bare use is its address */
+    bool short_ptr; /* SHORT written: the 8-bit jump, or an error */
+    bool near_ptr;  /* NEAR PTR written: the 32-bit form */
 };
 
 struct Code {
@@ -36,12 +38,19 @@ struct Code {
 class X64Target : public Target {
 public:
     X64Target();
+    void begin_pass(int pass);
     void statement(Unit &u, std::vector<Token> &t);
     bool finished() const;
+    bool again() const;
+    bool resolve_here(const Unit &u, const Fixup &f, const Symbol &s, long long &value, int &width) const;
 
 private:
     bool done;
+    int pass;
     int proc;
+    std::vector<unsigned char> jsize;   /* each jump in source order: 0 short, 1 near; only ever grows */
+    size_t jn;                          /* the jumps seen this pass */
+    bool grew;                          /* a jump was widened this pass */
     bool proc_private;                  /* OPTION PROC:PRIVATE: PROCs are Static unless PUBLIC */
     bool frame;                         /* the open PROC is a PROC FRAME */
     unsigned long frame_start;
@@ -58,6 +67,7 @@ private:
     void segment(Unit &u, const std::vector<Token> &t);
     void option(Unit &u, const std::vector<Token> &t);
     void typed(Unit &u, Operand &o);
+    int jump_width(Unit &u, const Operand &o);
     void unwind(Unit &u, const std::vector<Token> &t, const std::string &w);
     void end_frame(Unit &u);
     void data(Unit &u, const std::vector<Token> &t, size_t from, int width);

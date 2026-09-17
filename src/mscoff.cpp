@@ -70,10 +70,16 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
 {
     const size_t nsec = u.sections.size();
     std::vector<long> index(u.symbols.size(), -1);
+    std::vector<bool> referenced(u.symbols.size(), false);
+    for (size_t i = 0; i < nsec; i++)
+        for (size_t r = 0; r < u.sections[i].relocs.size(); r++)
+            referenced[u.sections[i].relocs[r].symbol] = true;
     long count = (long)nsec * 2;
     for (size_t i = 0; i < u.symbols.size(); i++) {
         const Symbol &s = u.symbols[i];
         if (s.bind == B_CONST || (!s.defined && s.bind != B_EXTERN))
+            continue;
+        if (s.name[0] == '\001' && !referenced[i])
             continue;
         index[i] = count++;
     }

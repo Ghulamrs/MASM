@@ -1,8 +1,44 @@
 #include "asm.h"
 #include <cstdio>
 
-Unit::Unit() : line(0), current(-1)
+Unit::Unit() : line(0), pass(0), current(-1)
 {
+}
+
+/* a new pass over the source: the sections, fixups and errors start again; the symbols keep
+   their definitions from the previous pass (so a forward reference is known) and remember
+   where they were, for moved() */
+void Unit::begin_pass(int n)
+{
+    pass = n;
+    prev_sizes.clear();
+    for (size_t i = 0; i < sections.size(); i++)
+        prev_sizes.push_back((unsigned long)sections[i].bytes.size());
+    sections.clear();
+    current = -1;
+    fixups.clear();
+    errors.clear();
+    line = 0;
+    for (size_t i = 0; i < symbols.size(); i++) {
+        symbols[i].prev_section = symbols[i].section;
+        symbols[i].prev_value = symbols[i].value;
+    }
+}
+
+/* did any section's size or any symbol's place change since the previous pass? */
+bool Unit::moved() const
+{
+    if (sections.size() != prev_sizes.size())
+        return true;
+    for (size_t i = 0; i < sections.size(); i++)
+        if (sections[i].bytes.size() != prev_sizes[i])
+            return true;
+    for (size_t i = 0; i < symbols.size(); i++) {
+        const Symbol &s = symbols[i];
+        if (s.defined && (s.value != s.prev_value || s.section != s.prev_section))
+            return true;
+    }
+    return false;
 }
 
 void Unit::error(const std::string &msg)
@@ -67,6 +103,9 @@ int Unit::ref(const std::string &name)
     s.section = -1;
     s.value = 0;
     s.line = line;
+    s.pass = 0;
+    s.prev_section = -1;
+    s.prev_value = 0;
     symbols.push_back(s);
     return (int)symbols.size() - 1;
 }
@@ -74,14 +113,15 @@ int Unit::ref(const std::string &name)
 /* an anonymous defined label for $ used as an address */
 int Unit::location(int sec, long long off)
 {
-    char buf[32];
-    snprintf(buf, sizeof buf, "\001%u", (unsigned)symbols.size());
+    char buf[48];
+    snprintf(buf, sizeof buf, "\001%d_%lld", sec, off);
     int i = ref(buf);
     Symbol &s = symbols[i];
     s.defined = true;
     s.type = SYM_NEAR;
     s.section = sec;
     s.value = off;
+    s.pass = pass;
     return i;
 }
 
@@ -91,15 +131,17 @@ bool Unit::define(const std::string &name, int type)
         return false;
     int i = ref(name);
     Symbol &s = symbols[i];
-    if (s.defined || s.bind == B_EXTERN || s.bind == B_CONST) {
+    if ((s.defined && s.pass == pass) || s.bind == B_EXTERN || (s.bind == B_CONST && s.pass == pass)) {
         error("'" + name + "' is already defined");
         return false;
     }
+    if (s.bind == B_CONST) s.bind = B_LOCAL;
     s.defined = true;
     s.type = type;
     s.section = current;
     s.value = (long long)here();
     s.line = line;
+    s.pass = pass;
     return true;
 }
 
@@ -107,13 +149,14 @@ bool Unit::constant(const std::string &name, long long v)
 {
     int i = ref(name);
     Symbol &s = symbols[i];
-    if (s.defined) {
+    if ((s.defined && s.pass == pass) || s.bind == B_EXTERN) {
         error("'" + name + "' is already defined");
         return false;
     }
     s.bind = B_CONST;
     s.defined = true;
     s.value = v;
+    s.pass = pass;
     return true;
 }
 
@@ -151,6 +194,7 @@ void Unit::fixup(unsigned long at, int sym, RelKind kind)
     f.sub = -1;
     f.width = 4;
     f.kind = kind;
+    f.branch = false;
     f.line = line;
     fixups.push_back(f);
 }
@@ -163,19 +207,7 @@ void Unit::difference(unsigned long at, int sym, int sub, int width)
     fixups.back().width = width;
 }
 
-static long read32(const std::vector<unsigned char> &b, unsigned long at)
-{
-    unsigned long v = b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | ((unsigned long)b[at + 3] << 24);
-    return (long)(int)v;
-}
-
-static void write32(std::vector<unsigned char> &b, unsigned long at, long v)
-{
-    for (int i = 0; i < 4; i++)
-        b[at + i] = (unsigned char)((unsigned long)v >> (8 * i));
-}
-
-void Unit::resolve()
+void Unit::resolve(const Target &t)
 {
     for (size_t i = 0; i < symbols.size(); i++) {
         const Symbol &s = symbols[i];
@@ -208,9 +240,19 @@ void Unit::resolve()
                 sec.bytes[f.at + i] = (unsigned char)((unsigned long long)d >> (8 * i));
             continue;
         }
-        if (f.kind == R_REL32 && s.defined && s.section == f.section) {
-            long a = read32(sec.bytes, f.at);
-            write32(sec.bytes, f.at, (long)(s.value + a - (long long)(f.at + 4)));
+        long long v;
+        int width;
+        if (t.resolve_here(*this, f, s, v, width)) {
+            if (width == 1 && (v < -128 || v > 127)) {
+                error("jump destination too far");
+                continue;
+            }
+            for (int k = 0; k < width; k++)
+                sec.bytes[f.at + k] = (unsigned char)((unsigned long long)v >> (8 * k));
+            continue;
+        }
+        if (f.kind == R_REL8) {
+            error("a short jump cannot leave its section");
             continue;
         }
         Reloc r;

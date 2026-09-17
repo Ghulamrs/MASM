@@ -80,9 +80,82 @@ static void split_items(const std::vector<Token> &t, size_t from, std::vector<si
     cuts.push_back(t.size() + 1);
 }
 
-X64Target::X64Target() : done(false), proc(-1), proc_private(false), frame(false), frame_start(0),
-    frame_reg(0), frame_off(0), prolog_end(-1), xdatasym(-1)
+X64Target::X64Target() : done(false), pass(0), proc(-1), jn(0), grew(false), proc_private(false), frame(false),
+    frame_start(0), frame_reg(0), frame_off(0), prolog_end(-1), xdatasym(-1)
 {
+}
+
+void X64Target::begin_pass(int p)
+{
+    done = false;
+    pass = p;
+    proc = -1;
+    jn = 0;
+    grew = false;
+    segs.clear();
+    segnames.clear();
+    proc_private = false;
+    directives.clear();
+    frame = false;
+    prolog_end = -1;
+    codes.clear();
+    xdatasym = -1;
+}
+
+bool X64Target::again() const
+{
+    return grew;
+}
+
+/* the x86 rule: a branch in its own section is settled here, relative to the end of the
+   displacement; anything else, including a RIP-relative data reference to this section, is
+   left to the linker as ml64 leaves it */
+bool X64Target::resolve_here(const Unit &u, const Fixup &f, const Symbol &s, long long &value, int &width) const
+{
+    if (!s.defined || s.bind == B_EXTERN || s.section != f.section)
+        return false;
+    if (f.kind == R_REL8) {
+        width = 1;
+        value = s.value + (signed char)u.sections[f.section].bytes[f.at] - (long long)(f.at + 1);
+        return true;
+    }
+    if (f.kind == R_REL32 && f.branch) {
+        width = 4;
+        const std::vector<unsigned char> &b = u.sections[f.section].bytes;
+        long a = (long)(int)(unsigned)(b[f.at] | (b[f.at + 1] << 8) | (b[f.at + 2] << 16) | ((unsigned long)b[f.at + 3] << 24));
+        value = s.value + a - (long long)(f.at + 4);
+        return true;
+    }
+    return false;
+}
+
+/* the width of a JMP or Jcc: SHORT or NEAR PTR decide; otherwise short when the target is known
+   to be in reach, near once it was ever found not to be (the choice only widens, pass by pass);
+   a target not seen yet is assumed short on the first pass */
+int X64Target::jump_width(Unit &u, const Operand &o)
+{
+    size_t j = jn++;
+    if (j >= jsize.size())
+        jsize.push_back(0);
+    if (o.near_ptr)
+        return 4;
+    const Symbol &s = u.symbols[o.sym];
+    bool here = s.defined && s.bind != B_EXTERN && s.section == u.current;
+    if (!o.short_ptr && jsize[j])
+        return 4;
+    if (!here) {
+        if (!s.defined && s.bind != B_EXTERN && pass == 1)
+            return 1;
+        if (o.short_ptr) { u.error("a short jump cannot leave its section"); return 1; }
+        if (!jsize[j]) { jsize[j] = 1; grew = true; }
+        return 4;
+    }
+    long long disp = s.value + o.value - (long long)(u.here() + 2);
+    if (disp >= -128 && disp <= 127)
+        return 1;
+    if (o.short_ptr) { u.error("jump destination too far"); return 1; }
+    if (!jsize[j]) { jsize[j] = 1; grew = true; }
+    return 4;
 }
 
 bool X64Target::finished() const
@@ -657,7 +730,13 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
     o.wide = false;
     o.ptr = false;
     o.near = false;
+    o.short_ptr = false;
+    o.near_ptr = false;
 
+    if (is_word(t, a, "SHORT") && b - a > 1) {
+        o.short_ptr = true;
+        a++;
+    }
     int ptr = ptr_size(t, a);
     bool near_ptr = is_word(t, a, "NEAR");
     if (ptr || near_ptr) {
@@ -668,6 +747,7 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
         o.size = ptr;
         o.ptr = ptr != 0;
         o.near = near_ptr;
+        o.near_ptr = near_ptr;
         a += 2;
         if (a >= b) {
             u.error("memory operand expected");
