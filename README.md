@@ -60,7 +60,7 @@ labels as `DD`/`DQ` values (`DQ v+8` keeps the addend in place, as COFF does), `
 (ADDR32NB), and label differences `DB L2-L1` (folded when both are known, written at the end otherwise).
 
 Instructions: `MOV MOVZX MOVSX MOVSXD ADD OR ADC SBB AND SUB XOR CMP TEST LEA IMUL MUL DIV IDIV NEG NOT INC DEC
-SHL SAL SHR SAR PUSH POP CALL JMP Jcc RET NOP CQO CDQ CDQE LEAVE INT3`.
+SHL SAL SHR SAR PUSH POP CALL JMP Jcc SETcc CMOVcc RET NOP CQO CDQ CDQE LEAVE INT3`.
 
 Operands: 64/32/16/8-bit registers (`ah`-`bh` never with a REX prefix, as ml64 rules), constants,
 `BYTE`/`WORD`/`DWORD`/`QWORD PTR`, `[base + index*scale + disp]` also spelled `disp[base]` or `[base][index]`,

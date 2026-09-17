@@ -479,5 +479,26 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         return;
     }
 
+    /* SETcc r/m8 and CMOVcc r16/32/64, r/m: the Jcc condition codes */
+    if (name.compare(0, 3, "SET") == 0 && (k = lookup(jcc_names, 30, "J" + name.substr(3))) >= 0) {
+        if (n != 1 || ops[0].kind == O_IMM) { u.error(name + " needs a byte register or memory operand"); return; }
+        if (ops[0].size == 0) ops[0].size = 8;
+        if (ops[0].size != 8) { u.error(name + " needs a byte operand"); return; }
+        rm2(c, false, 0, ops[0], 0x0F, 0x90 + k);
+        emit(u, c);
+        return;
+    }
+    if (name.compare(0, 4, "CMOV") == 0 && (k = lookup(jcc_names, 30, "J" + name.substr(4))) >= 0) {
+        if (n != 2 || ops[0].kind != O_REG || ops[1].kind == O_IMM || ops[0].size == 8) {
+            u.error(name + " needs a register and a register or memory operand");
+            return;
+        }
+        if (!same_size(u, ops[0], ops[1])) return;
+        if (ops[0].size == 16) put(c, 0x66);
+        rm2(c, ops[0].size == 64, ops[0].reg, ops[1], 0x0F, 0x40 + k);
+        emit(u, c);
+        return;
+    }
+
     u.error("unknown instruction '" + name + "'");
 }
