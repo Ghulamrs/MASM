@@ -8,3 +8,11 @@ Command-line probes that need no file (see D8/D14 in the report):
   asm -t x64 same.asm same.asm      two jobs write the same .obj, no diagnostic
   asm -t x64 <dir> -o d.obj         'line 0: END expected'
   asm -t x64 f.asm -o /nonexistent/x.obj   'cannot create ...', rc 1
+
+Status 2026-09-18 (mended in commits df4f968..ec83105 on master; see REVIEW-2026-09-17.md "Mended"):
+  CLOSED: A4 A5 A8 A9 B5 B6 B7 D1 D2 D3 D6 D11 D13(part) R1 R3 R4 R5 R6 R7 R8 R9 R10 R11 R14 R16
+          R17 R18 R19 R25 R26; R22 (character constants only); R27 (PROC PUBLIC/PRIVATE only)
+  OPEN:   A1 A2 A3 A6 A7 (item 17), B2 B3 B4 (18), D7 D8 D15 (19), R2 R12 R13 R15 R20 R21 R22
+          (doubled quotes, DW 'ab') R23 R24 R27 (::, @@) D4 D5 D16 (20), D13 (addend, 21),
+          E2 E3 (22), D10 (g++ leg)
+  Each closed probe now gives ml64's bytes or ml64's refusal; run  asm -t x64 <file>  to see.
