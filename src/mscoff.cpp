@@ -63,6 +63,7 @@ static unsigned reloc_type(RelKind k)
     if (k == R_ADDR64) return 0x0001;
     if (k == R_ADDR32) return 0x0002;
     if (k == R_ADDR32NB) return 0x0003;
+    if (k >= R_REL32_1 && k <= R_REL32_5) return 0x0005 + (k - R_REL32_1);
     return 0x0004;
 }
 

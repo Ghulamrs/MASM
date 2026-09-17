@@ -13,7 +13,8 @@ struct Token {
     bool wide;      /* a number of 2^32 or more: MOV r64 takes the 64-bit immediate for it, as ml64 */
 };
 
-enum RelKind { R_REL32, R_REL8, R_ADDR64, R_ADDR32, R_ADDR32NB, R_DIFF };
+/* REL32_n: a RIP-relative displacement followed by n bytes of immediate (COFF types 5..9) */
+enum RelKind { R_REL32, R_REL32_1, R_REL32_2, R_REL32_3, R_REL32_4, R_REL32_5, R_REL8, R_ADDR64, R_ADDR32, R_ADDR32NB, R_DIFF };
 
 struct Reloc {
     unsigned long offset;

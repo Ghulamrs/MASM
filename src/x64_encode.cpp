@@ -40,11 +40,6 @@ static bool fits32(long long v)
     return v >= -2147483648LL && v <= 2147483647LL;
 }
 
-static bool is_rip(const Operand &m)
-{
-    return m.kind == O_MEM && m.sym >= 0;
-}
-
 /* an 8-bit register operand may need a REX prefix (SPL..DIL) or forbid one (AH..BH) */
 static void note(Code &c, const Operand &o)
 {
@@ -151,8 +146,15 @@ static void emit(Unit &u, const Code &c)
     unsigned long at = u.here();
     for (int i = 0; i < c.n; i++)
         u.emit8(c.b[i]);
-    if (c.disp_at >= 0)
-        u.fixup(at + c.disp_at, c.sym, c.kind);
+    if (c.disp_at >= 0) {
+        /* a RIP-relative displacement followed by an immediate is REL32_n, n the bytes after it,
+           so the linker counts to the end of the instruction as the CPU does */
+        RelKind kind = c.kind;
+        int after = c.n - (c.disp_at + 4);
+        if (kind == R_REL32 && after > 0)
+            kind = (RelKind)(R_REL32_1 + after - 1);
+        u.fixup(at + c.disp_at, c.sym, kind);
+    }
 }
 
 /* a branch with a 32-bit displacement (E8, E9, 0F 8x) or an 8-bit one (EB, 7x) */
@@ -294,14 +296,6 @@ static bool imm_fits(Unit &u, int size, long long v)
         return true;
     u.error(size == 64 ? "immediate does not fit in 32 bits" : "immediate does not fit the operand");
     return false;
-}
-
-static bool imm_after_rip(Unit &u, const Operand &m)
-{
-    if (!is_rip(m))
-        return false;
-    u.error("a label address with an immediate is not supported in this version");
-    return true;
 }
 
 /* the value as the operand width sees it, sign-extended back */
@@ -454,7 +448,7 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
             emit(u, c);
             return;
         }
-        if (!need_size(u, d) || imm_after_rip(u, d)) return;
+        if (!need_size(u, d)) return;
         int size = d.size;
         long long v = s.value;
         if (s.sym >= 0 && !(mov && d.kind == O_REG && size == 64)) {
@@ -570,7 +564,6 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         if (v == 1) {
             rm(c, ops[0].size, k, ops[0], 0xD1);
         } else {
-            if (imm_after_rip(u, ops[0])) return;
             rm(c, ops[0].size, k, ops[0], 0xC1);
             put(c, (unsigned)v);
         }

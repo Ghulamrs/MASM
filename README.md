@@ -68,7 +68,8 @@ MOVQ MOVD` with `xmm0`-`xmm15` and `XMMWORD PTR`.
 
 Operands: 64/32/16/8-bit and XMM registers (`ah`-`bh` never with a REX prefix, as ml64 rules), constants,
 `BYTE`/`WORD`/`DWORD`/`QWORD PTR`, `[base + index*scale + disp]` also spelled `disp[base]` or `[base][index]`,
-labels (RIP-relative) bare or in brackets - a bare data label carries its declared width (`mov v, 5`
+labels (RIP-relative; an immediate after the displacement makes the relocation `REL32_n`, as ml64 writes
+it) bare or in brackets - a bare data label carries its declared width (`mov v, 5`
 with `v DD 0` is a dword store) and `EXTERN name:QWORD` its type, so `call`/`jmp` through such a label is
 `FF /2`/`FF /4` and `mov r64, [code_label]` is the label's address, as ml64 reads them - `label[reg*scale]` and `[reg+label]` (an absolute ADDR32
 displacement, as ml64 makes them), `OFFSET label` into a 64-bit register, and character constants
