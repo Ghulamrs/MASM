@@ -6,6 +6,9 @@ static void start(Code &c)
     c.disp_at = -1;
     c.sym = -1;
     c.kind = R_REL32;
+    c.rex = false;
+    c.high = false;
+    c.bad = false;
 }
 
 static void put(Code &c, unsigned v)
@@ -17,6 +20,14 @@ static void put32(Code &c, long long v)
 {
     for (int i = 0; i < 4; i++)
         put(c, (unsigned)((unsigned long long)v >> (8 * i)) & 0xFF);
+}
+
+/* an immediate of the operand's size: 1, 2 or 4 bytes (64-bit operands take a sign-extended 4) */
+static void put_imm(Code &c, int size, long long v)
+{
+    if (size == 8) put(c, (unsigned)v & 0xFF);
+    else if (size == 16) { put(c, (unsigned)v & 0xFF); put(c, (unsigned)(v >> 8) & 0xFF); }
+    else put32(c, v);
 }
 
 static bool fits8(long long v)
@@ -34,18 +45,34 @@ static bool is_rip(const Operand &m)
     return m.kind == O_MEM && m.sym >= 0;
 }
 
+/* an 8-bit register operand may need a REX prefix (SPL..DIL) or forbid one (AH..BH) */
+static void note(Code &c, const Operand &o)
+{
+    if (o.kind != O_REG || o.size != 8)
+        return;
+    if (o.high) c.high = true;
+    if (o.rexonly) c.rex = true;
+}
+
+static void rex(Code &c, int bits)
+{
+    if (bits || c.rex) {
+        if (c.high) c.bad = true;
+        put(c, 0x40 | bits);
+    }
+}
+
 static void rm_code(Code &c, bool w, int regf, const Operand &m, const unsigned char *op, int opn)
 {
-    int rex = w ? 8 : 0;
-    if (regf & 8) rex |= 4;
+    int bits = w ? 8 : 0;
+    if (regf & 8) bits |= 4;
     if (m.kind == O_REG) {
-        if (m.reg & 8) rex |= 1;
+        if (m.reg & 8) bits |= 1;
     } else {
-        if (m.base >= 0 && (m.base & 8)) rex |= 1;
-        if (m.index >= 0 && (m.index & 8)) rex |= 2;
+        if (m.base >= 0 && (m.base & 8)) bits |= 1;
+        if (m.index >= 0 && (m.index & 8)) bits |= 2;
     }
-    if (rex)
-        put(c, 0x40 | rex);
+    rex(c, bits);
     for (int i = 0; i < opn; i++)
         put(c, op[i]);
 
@@ -94,8 +121,27 @@ static void rm2(Code &c, bool w, int regf, const Operand &m, unsigned op1, unsig
     rm_code(c, w, regf, m, b, 2);
 }
 
+/* one-byte opcode by operand size: 16 takes the 66 prefix, 8 the even opcode, 64 REX.W */
+static void rm(Code &c, int size, int regf, const Operand &m, unsigned op)
+{
+    if (size == 16) put(c, 0x66);
+    rm1(c, size == 64, regf, m, size == 8 ? (op & ~1u) : op);
+}
+
+/* the accumulator short forms: op with AL, op+1 with AX/EAX/RAX */
+static void acc(Code &c, int size, unsigned op)
+{
+    if (size == 16) put(c, 0x66);
+    rex(c, size == 64 ? 8 : 0);
+    put(c, size == 8 ? (op & ~1u) : op);
+}
+
 static void emit(Unit &u, const Code &c)
 {
+    if (c.bad) {
+        u.error("AH, BH, CH or DH cannot be used with SPL, BPL, SIL, DIL or R8-R15");
+        return;
+    }
     unsigned long at = u.here();
     for (int i = 0; i < c.n; i++)
         u.emit8(c.b[i]);
@@ -159,7 +205,7 @@ static bool same_size(Unit &u, Operand &a, Operand &b)
     if (a.size == 0) a.size = b.size;
     if (b.size == 0) b.size = a.size;
     if (a.size == 0) {
-        u.error("size unknown; use QWORD PTR or DWORD PTR");
+        u.error("size unknown; use BYTE, WORD, DWORD or QWORD PTR");
         return false;
     }
     if (a.size != b.size) {
@@ -172,17 +218,23 @@ static bool same_size(Unit &u, Operand &a, Operand &b)
 static bool need_size(Unit &u, const Operand &m)
 {
     if (m.size == 0) {
-        u.error("size unknown; use QWORD PTR or DWORD PTR");
+        u.error("size unknown; use BYTE, WORD, DWORD or QWORD PTR");
         return false;
     }
     return true;
 }
 
+/* the immediate must fit the operand's width, signed or unsigned; a 64-bit operand takes a signed 32 */
 static bool imm_fits(Unit &u, int size, long long v)
 {
-    if (size == 64 ? fits32(v) : (v >= -2147483648LL && v <= 4294967295LL))
+    bool ok;
+    if (size == 8) ok = v >= -128 && v <= 255;
+    else if (size == 16) ok = v >= -32768 && v <= 65535;
+    else if (size == 32) ok = v >= -2147483648LL && v <= 4294967295LL;
+    else ok = fits32(v);
+    if (ok)
         return true;
-    u.error("immediate does not fit in 32 bits");
+    u.error(size == 64 ? "immediate does not fit in 32 bits" : "immediate does not fit the operand");
     return false;
 }
 
@@ -194,8 +246,11 @@ static bool imm_after_rip(Unit &u, const Operand &m)
     return true;
 }
 
-static long long sx32(long long v)
+/* the value as the operand width sees it, sign-extended back */
+static long long narrow(int size, long long v)
 {
+    if (size == 8) return (long long)(signed char)(v & 0xFF);
+    if (size == 16) return (long long)(short)(v & 0xFFFF);
     return (long long)(int)(unsigned int)(v & 0xFFFFFFFFLL);
 }
 
@@ -211,6 +266,8 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
     size_t n = ops.size();
     Code c;
     start(c);
+    for (size_t i = 0; i < n; i++)
+        note(c, ops[i]);
     int k;
 
     k = lookup(plain_names, 5, name);
@@ -239,22 +296,22 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         bool test = name == "TEST";
         if (s.kind != O_IMM) {
             if (!same_size(u, d, s)) return;
-            bool w = d.size == 64;
+            int size = d.size;
             if (test) {
-                if (s.kind == O_REG) rm1(c, w, s.reg, d, 0x85);
-                else rm1(c, w, d.reg, s, 0x85);
+                if (s.kind == O_REG) rm(c, size, s.reg, d, 0x85);
+                else rm(c, size, d.reg, s, 0x85);
             } else if (d.kind == O_REG) {
-                rm1(c, w, d.reg, s, mov ? 0x8B : (unsigned)(k * 8 + 3));
+                rm(c, size, d.reg, s, mov ? 0x8B : (unsigned)(k * 8 + 3));
             } else {
-                rm1(c, w, s.reg, d, mov ? 0x89 : (unsigned)(k * 8 + 1));
+                rm(c, size, s.reg, d, mov ? 0x89 : (unsigned)(k * 8 + 1));
             }
             emit(u, c);
             return;
         }
         if (!need_size(u, d) || imm_after_rip(u, d)) return;
-        bool w = d.size == 64;
+        int size = d.size;
         long long v = s.value;
-        if (mov && d.kind == O_REG && w && !fits32(v)) {
+        if (mov && d.kind == O_REG && size == 64 && !fits32(v)) {
             put(c, 0x48 | ((d.reg & 8) ? 1 : 0));
             put(c, 0xB8 | (d.reg & 7));
             u.emit8(c.b[0]);
@@ -262,52 +319,50 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
             u.emit64((unsigned long long)v);
             return;
         }
-        if (!imm_fits(u, d.size, v)) return;
-        v = sx32(v);
-        if (mov && d.kind == O_REG && !w) {
-            if (d.reg & 8) put(c, 0x41);
-            put(c, 0xB8 | (d.reg & 7));
+        if (!imm_fits(u, size, v)) return;
+        v = narrow(size, v);
+        if (mov && d.kind == O_REG && size != 64) {
+            if (size == 16) put(c, 0x66);
+            rex(c, (d.reg & 8) ? 1 : 0);
+            put(c, (size == 8 ? 0xB0 : 0xB8) | (d.reg & 7));
         } else if (mov) {
-            rm1(c, w, 0, d, 0xC7);
+            rm(c, size, 0, d, 0xC7);
         } else if (test) {
-            if (d.kind == O_REG && d.reg == 0) {
-                if (w) put(c, 0x48);
-                put(c, 0xA9);
-            } else {
-                rm1(c, w, 0, d, 0xF7);
-            }
-        } else if (fits8(v)) {
-            rm1(c, w, k, d, 0x83);
+            if (d.kind == O_REG && d.reg == 0) acc(c, size, 0xA9);
+            else rm(c, size, 0, d, 0xF7);
+        } else if (size != 8 && fits8(v)) {
+            rm(c, size, k, d, 0x83);
             put(c, (unsigned)v & 0xFF);
             emit(u, c);
             return;
         } else if (d.kind == O_REG && d.reg == 0) {
-            if (w) put(c, 0x48);
-            put(c, k * 8 + 5);
+            acc(c, size, (unsigned)(k * 8 + 5));
         } else {
-            rm1(c, w, k, d, 0x81);
+            rm(c, size, k, d, 0x81);
         }
-        put32(c, v);
+        put_imm(c, size, v);
         emit(u, c);
         return;
     }
 
     if (name == "LEA") {
-        if (n != 2 || ops[0].kind != O_REG || ops[1].kind != O_MEM) {
+        if (n != 2 || ops[0].kind != O_REG || ops[1].kind != O_MEM || ops[0].size == 8) {
             u.error("LEA needs a register and a memory operand");
             return;
         }
+        if (ops[0].size == 16) put(c, 0x66);
         rm1(c, ops[0].size == 64, ops[0].reg, ops[1], 0x8D);
         emit(u, c);
         return;
     }
 
     if (name == "IMUL" && n == 2) {
-        if (ops[0].kind != O_REG || ops[1].kind == O_IMM) {
+        if (ops[0].kind != O_REG || ops[1].kind == O_IMM || ops[0].size == 8) {
             u.error("IMUL needs a register and a register or memory operand");
             return;
         }
         if (!same_size(u, ops[0], ops[1])) return;
+        if (ops[0].size == 16) put(c, 0x66);
         rm2(c, ops[0].size == 64, ops[0].reg, ops[1], 0x0F, 0xAF);
         emit(u, c);
         return;
@@ -318,8 +373,8 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
     if (k >= 0 || name == "INC" || name == "DEC") {
         if (n != 1 || ops[0].kind == O_IMM) { u.error(name + " needs one register or memory operand"); return; }
         if (!need_size(u, ops[0])) return;
-        if (k >= 0) rm1(c, ops[0].size == 64, k, ops[0], 0xF7);
-        else rm1(c, ops[0].size == 64, name == "INC" ? 0 : 1, ops[0], 0xFF);
+        if (k >= 0) rm(c, ops[0].size, k, ops[0], 0xF7);
+        else rm(c, ops[0].size, name == "INC" ? 0 : 1, ops[0], 0xFF);
         emit(u, c);
         return;
     }
@@ -334,9 +389,9 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         long long v = ops[1].value;
         if (v < 0 || v > 255) { u.error("shift count does not fit"); return; }
         if (v == 1) {
-            rm1(c, ops[0].size == 64, k, ops[0], 0xD1);
+            rm(c, ops[0].size, k, ops[0], 0xD1);
         } else {
-            rm1(c, ops[0].size == 64, k, ops[0], 0xC1);
+            rm(c, ops[0].size, k, ops[0], 0xC1);
             put(c, (unsigned)v);
         }
         emit(u, c);
@@ -348,7 +403,8 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         if (n != 1) { u.error(name + " needs one operand"); return; }
         Operand &o = ops[0];
         if (o.kind == O_REG) {
-            if (o.size != 64) { u.error(name + " needs a 64-bit register"); return; }
+            if (o.size != 64 && o.size != 16) { u.error(name + " needs a 64-bit register"); return; }
+            if (o.size == 16) u.emit8(0x66);
             if (o.reg & 8) u.emit8(0x41);
             u.emit8((push ? 0x50 : 0x58) | (o.reg & 7));
             return;
@@ -360,7 +416,8 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
             else { u.emit8(0x68); u.emit32((unsigned long)o.value); }
             return;
         }
-        if (o.size != 64 && !o.label) { u.error(name + " needs QWORD PTR"); return; }
+        if (o.size != 64 && o.size != 16 && !o.label) { u.error(name + " needs QWORD PTR"); return; }
+        if (o.size == 16) put(c, 0x66);
         rm1(c, false, push ? 6 : 0, o, push ? 0xFF : 0x8F);
         emit(u, c);
         return;

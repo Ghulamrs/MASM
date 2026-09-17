@@ -4,17 +4,27 @@ struct RegName {
     const char *name;
     int num;
     int size;
+    int flag;       /* 1: needs a REX prefix (SPL..DIL); 2: forbids one (AH..BH) */
 };
 
 static const RegName reg_names[] = {
-    {"RAX", 0, 64}, {"RCX", 1, 64}, {"RDX", 2, 64}, {"RBX", 3, 64},
-    {"RSP", 4, 64}, {"RBP", 5, 64}, {"RSI", 6, 64}, {"RDI", 7, 64},
-    {"R8", 8, 64},  {"R9", 9, 64},  {"R10", 10, 64}, {"R11", 11, 64},
-    {"R12", 12, 64}, {"R13", 13, 64}, {"R14", 14, 64}, {"R15", 15, 64},
-    {"EAX", 0, 32}, {"ECX", 1, 32}, {"EDX", 2, 32}, {"EBX", 3, 32},
-    {"ESP", 4, 32}, {"EBP", 5, 32}, {"ESI", 6, 32}, {"EDI", 7, 32},
-    {"R8D", 8, 32}, {"R9D", 9, 32}, {"R10D", 10, 32}, {"R11D", 11, 32},
-    {"R12D", 12, 32}, {"R13D", 13, 32}, {"R14D", 14, 32}, {"R15D", 15, 32},
+    {"RAX", 0, 64, 0}, {"RCX", 1, 64, 0}, {"RDX", 2, 64, 0}, {"RBX", 3, 64, 0},
+    {"RSP", 4, 64, 0}, {"RBP", 5, 64, 0}, {"RSI", 6, 64, 0}, {"RDI", 7, 64, 0},
+    {"R8", 8, 64, 0},  {"R9", 9, 64, 0},  {"R10", 10, 64, 0}, {"R11", 11, 64, 0},
+    {"R12", 12, 64, 0}, {"R13", 13, 64, 0}, {"R14", 14, 64, 0}, {"R15", 15, 64, 0},
+    {"EAX", 0, 32, 0}, {"ECX", 1, 32, 0}, {"EDX", 2, 32, 0}, {"EBX", 3, 32, 0},
+    {"ESP", 4, 32, 0}, {"EBP", 5, 32, 0}, {"ESI", 6, 32, 0}, {"EDI", 7, 32, 0},
+    {"R8D", 8, 32, 0}, {"R9D", 9, 32, 0}, {"R10D", 10, 32, 0}, {"R11D", 11, 32, 0},
+    {"R12D", 12, 32, 0}, {"R13D", 13, 32, 0}, {"R14D", 14, 32, 0}, {"R15D", 15, 32, 0},
+    {"AX", 0, 16, 0}, {"CX", 1, 16, 0}, {"DX", 2, 16, 0}, {"BX", 3, 16, 0},
+    {"SP", 4, 16, 0}, {"BP", 5, 16, 0}, {"SI", 6, 16, 0}, {"DI", 7, 16, 0},
+    {"R8W", 8, 16, 0}, {"R9W", 9, 16, 0}, {"R10W", 10, 16, 0}, {"R11W", 11, 16, 0},
+    {"R12W", 12, 16, 0}, {"R13W", 13, 16, 0}, {"R14W", 14, 16, 0}, {"R15W", 15, 16, 0},
+    {"AL", 0, 8, 0}, {"CL", 1, 8, 0}, {"DL", 2, 8, 0}, {"BL", 3, 8, 0},
+    {"AH", 4, 8, 2}, {"CH", 5, 8, 2}, {"DH", 6, 8, 2}, {"BH", 7, 8, 2},
+    {"SPL", 4, 8, 1}, {"BPL", 5, 8, 1}, {"SIL", 6, 8, 1}, {"DIL", 7, 8, 1},
+    {"R8B", 8, 8, 0}, {"R9B", 9, 8, 0}, {"R10B", 10, 8, 0}, {"R11B", 11, 8, 0},
+    {"R12B", 12, 8, 0}, {"R13B", 13, 8, 0}, {"R14B", 14, 8, 0}, {"R15B", 15, 8, 0},
 };
 
 static const RegName *find_reg(const Token &k)
@@ -31,6 +41,15 @@ static const RegName *find_reg(const Token &k)
 static bool is_word(const std::vector<Token> &t, size_t i, const char *w)
 {
     return i < t.size() && t[i].kind == T_NAME && upper(t[i].text) == w;
+}
+
+static int ptr_size(const std::vector<Token> &t, size_t i)
+{
+    if (is_word(t, i, "BYTE")) return 8;
+    if (is_word(t, i, "WORD")) return 16;
+    if (is_word(t, i, "DWORD")) return 32;
+    if (is_word(t, i, "QWORD")) return 64;
+    return 0;
 }
 
 static int data_width(const std::string &w)
@@ -300,13 +319,16 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
     o.value = 0;
     o.sym = -1;
     o.label = false;
+    o.high = false;
+    o.rexonly = false;
 
-    if (is_word(t, a, "QWORD") || is_word(t, a, "DWORD")) {
+    int ptr = ptr_size(t, a);
+    if (ptr) {
         if (!is_word(t, a + 1, "PTR")) {
             u.error("PTR expected");
             return false;
         }
-        o.size = upper(t[a].text) == "QWORD" ? 64 : 32;
+        o.size = ptr;
         a += 2;
         if (a >= b) {
             u.error("memory operand expected");
@@ -323,6 +345,8 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
             o.kind = O_REG;
             o.reg = r->num;
             o.size = r->size;
+            o.high = r->flag == 2;
+            o.rexonly = r->flag == 1;
             return true;
         }
     }

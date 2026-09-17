@@ -15,6 +15,8 @@ struct Operand {
     long long value;
     int sym;
     bool label;
+    bool high;      /* AH, BH, CH or DH: never with a REX prefix */
+    bool rexonly;   /* SPL, BPL, SIL or DIL: only with a REX prefix */
 };
 
 struct Code {
@@ -23,6 +25,9 @@ struct Code {
     int disp_at;
     int sym;
     RelKind kind;
+    bool rex;       /* a REX prefix is needed even with no bits set */
+    bool high;      /* a high byte register is an operand */
+    bool bad;       /* both: the combination ml64 refuses (A2218) */
 };
 
 class X64Target : public Target {

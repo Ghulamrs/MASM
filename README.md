@@ -52,7 +52,8 @@ and labels as `DD`/`DQ` values.
 Instructions: `MOV ADD OR ADC SBB AND SUB XOR CMP TEST LEA IMUL MUL DIV IDIV NEG NOT INC DEC
 SHL SAL SHR SAR PUSH POP CALL JMP Jcc RET NOP CQO CDQ CDQE LEAVE INT3`.
 
-Operands: 64/32-bit registers, constants, `QWORD PTR` / `DWORD PTR`, `[base + index*scale + disp]`,
+Operands: 64/32/16/8-bit registers (`ah`-`bh` never with a REX prefix, as ml64 rules), constants,
+`BYTE`/`WORD`/`DWORD`/`QWORD PTR`, `[base + index*scale + disp]`,
 and labels (RIP-relative), bare or in brackets.
 
 Notes:
@@ -76,5 +77,5 @@ form (`8B`, `03`, ...). Stage 2 begins with this ml64 comparison.
 ## Next
 
 1. Study the Compiler-C / Compiler-S / C++ / Compiler++ generators and their `.asm` output; extend the subset to match.
-2. Short jumps, SSE (floats), 8/16-bit registers, `PROC FRAME` and unwind directives (`.pdata`/`.xdata`).
+2. Short jumps, SSE (floats), `PROC FRAME` and unwind directives (`.pdata`/`.xdata`).
 3. C6000 target and TI ELF writer.
