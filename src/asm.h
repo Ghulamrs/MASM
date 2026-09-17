@@ -26,6 +26,7 @@ struct Section {
     bool code;          /* executable; instructions allowed */
     bool bss;           /* uninitialised: size only, no bytes in the object */
     bool readonly;
+    bool info;          /* linker directives (.drectve): not loaded */
     int align;          /* 1, 2, 4, ... 8192 */
     std::vector<unsigned char> bytes;
     std::vector<Reloc> relocs;

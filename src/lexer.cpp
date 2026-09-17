@@ -86,7 +86,7 @@ bool split_line(const std::string &src, std::vector<Token> &out, std::string &er
             t.text = src.substr(s, i - s);
             i++;
         } else if (c == ',' || c == ':' || c == '[' || c == ']' || c == '(' || c == ')' ||
-                   c == '+' || c == '-' || c == '*' || c == '/') {
+                   c == '+' || c == '-' || c == '*' || c == '/' || c == '<' || c == '>') {
             t.kind = T_PUNCT;
             t.text = std::string(1, c);
             i++;

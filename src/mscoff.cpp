@@ -49,6 +49,8 @@ static void section_name8(Bytes &b, const std::string &name, Bytes &strings)
    uninitialised C0000080, plus the alignment field */
 static unsigned long characteristics(const Section &s)
 {
+    if (s.info)
+        return 0x00000A00UL;
     unsigned long c = s.code ? 0x60000020UL : s.bss ? 0xC0000080UL : s.readonly ? 0x40000040UL : 0xC0000040UL;
     int a = 0;
     while ((1 << a) < s.align)

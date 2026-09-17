@@ -24,6 +24,7 @@ int Unit::section(const std::string &name, bool code, bool bss, bool readonly, i
     s.code = code;
     s.bss = bss;
     s.readonly = readonly;
+    s.info = false;
     s.align = align;
     sections.push_back(s);
     current = (int)sections.size() - 1;

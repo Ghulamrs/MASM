@@ -49,6 +49,10 @@ Directives: `.CODE`, `.DATA`, `name SEGMENT [READONLY] [ALIGN(n)] ['CODE'|'DATA'
 nest inside `.CODE`/`.DATA`; `_TEXT`, `_DATA`, `CONST` and `_BSS` name the sections the dotted directives
 open; the object carries ml64's characteristics: code `60000020`, data `C0000040`, READONLY `40000040`,
 uninitialised `C0000080`, plus the alignment field), `END`, `PUBLIC`, `EXTERN`/`EXTRN` (`name:PROC`, `name:QWORD`),
+`OPTION DOTNAME | NOSCOPED | PROC:PRIVATE | NOKEYWORD:<...> | CASEMAP:NONE | PROLOGUE:NONE | EPILOGUE:NONE`
+(PROC:PRIVATE makes PROCs Static unless PUBLIC, as ml64; the others name what happens anyway),
+`INCLUDELIB name` (a `.drectve` section with `/DEFAULTLIB:name`, as ml64 writes it), `TITLE`/`SUBTITLE`/`.LIST`
+and the like (ignored), `name PROC [PUBLIC|PRIVATE]`,
 `name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n`, `ORG $+n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
 labels as `DD`/`DQ` values (`DQ v+8` keeps the addend in place, as COFF does), `DD IMAGEREL label`
 (ADDR32NB), and label differences `DB L2-L1` (folded when both are known, written at the end otherwise).
@@ -64,7 +68,7 @@ displacement, as ml64 makes them), `OFFSET label` into a 64-bit register, and ch
 
 Notes:
 - Symbols are case-sensitive; keywords are not.
-- `PROC` names are public, as in MASM.
+- `PROC` names are public, as in MASM, unless `OPTION PROC:PRIVATE` or `name PROC PRIVATE` says otherwise.
 - Relative jumps are always the 32-bit form; short jumps come in stage 2.
 
 ## Checking against ml64 on Windows

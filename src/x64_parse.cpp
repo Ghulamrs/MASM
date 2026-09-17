@@ -73,7 +73,7 @@ static void split_items(const std::vector<Token> &t, size_t from, std::vector<si
     cuts.push_back(t.size() + 1);
 }
 
-X64Target::X64Target() : done(false), proc(-1)
+X64Target::X64Target() : done(false), proc(-1), proc_private(false)
 {
 }
 
@@ -131,7 +131,27 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     if (w == "END") {
         if (proc >= 0) u.error("PROC without ENDP");
         if (!segs.empty()) u.error("SEGMENT without ENDS");
+        if (!directives.empty()) {
+            /* ml64 writes INCLUDELIB as a .drectve section after everything else */
+            int i = u.section(".drectve", false, false, false, 1);
+            u.sections[i].info = true;
+            for (size_t k = 0; k < directives.size(); k++)
+                u.emit8((unsigned char)directives[k]);
+        }
         done = true;
+        return true;
+    }
+    if (w == "OPTION") {
+        option(u, t);
+        return true;
+    }
+    if (w == "INCLUDELIB") {
+        if (t.size() != 2 || t[1].kind != T_NAME) u.error("INCLUDELIB needs a library name");
+        else directives += "/DEFAULTLIB:" + t[1].text + " ";
+        return true;
+    }
+    if (w == "TITLE" || w == "SUBTITLE" || w == "SUBTTL" || w == "PAGE" ||
+        w == ".LIST" || w == ".NOLIST" || w == ".XLIST" || w == ".LISTALL" || w == ".LISTIF" || w == ".NOLISTIF") {
         return true;
     }
     if (w == "PUBLIC" || w == "EXTERN" || w == "EXTRN") {
@@ -227,14 +247,19 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     }
     if (w2 == "PROC") {
         if (proc >= 0) { u.error("nested PROC"); return true; }
-        if (t.size() > 2) u.error("PROC attributes are not supported in this version");
+        int global = proc_private ? 0 : 1;
+        for (size_t k = 2; k < t.size(); k++) {
+            if (is_word(t, k, "PUBLIC")) global = 1;
+            else if (is_word(t, k, "PRIVATE")) global = 0;
+            else { u.error("PROC attributes are not supported in this version"); return true; }
+        }
         Section *s = u.cur();
         if (!s) return true;
         if (!s->code) { u.error("PROC outside a code section"); return true; }
         if (!u.define(t[0].text)) return true;
         proc = u.find(t[0].text);
         u.symbols[proc].function = true;
-        u.symbols[proc].bind = B_GLOBAL;
+        if (global) u.symbols[proc].bind = B_GLOBAL;
         return true;
     }
     if (w2 == "ENDP") {
@@ -257,6 +282,56 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
         return true;
     }
     return false;
+}
+
+/* OPTION name[:value], ...: the ones the compilers write are taken; DOTNAME and NOSCOPED describe
+   what this assembler does anyway (dotted names are lexed, labels are file-scoped) */
+void X64Target::option(Unit &u, const std::vector<Token> &t)
+{
+    size_t k = 1;
+    while (k < t.size()) {
+        if (t[k].kind != T_NAME) { u.error("OPTION name expected"); return; }
+        std::string name = upper(t[k].text);
+        k++;
+        std::string value;
+        if (is_punct(t, k, ':')) {
+            k++;
+            if (is_punct(t, k, '<')) {
+                /* NOKEYWORD:<name name> - a text in angle brackets */
+                k++;
+                while (k < t.size() && !is_punct(t, k, '>')) k++;
+                if (k >= t.size()) { u.error("'>' expected"); return; }
+                value = "<>";
+                k++;
+            } else if (k < t.size() && t[k].kind == T_NAME) {
+                value = upper(t[k].text);
+                k++;
+            } else { u.error("OPTION value expected after ':'"); return; }
+        }
+        if (name == "DOTNAME" || name == "NODOTNAME" || name == "NOSCOPED" || name == "SCOPED" ||
+            name == "LJMP" || name == "NOLJMP" || name == "EMULATOR" || name == "NOEMULATOR") {
+            if (!value.empty()) { u.error("OPTION " + name + " takes no value"); return; }
+        } else if (name == "PROC") {
+            if (value == "PRIVATE") proc_private = true;
+            else if (value == "PUBLIC" || value == "EXPORT") proc_private = false;
+            else { u.error("OPTION PROC needs PRIVATE, PUBLIC or EXPORT"); return; }
+        } else if (name == "NOKEYWORD") {
+            if (value != "<>") { u.error("OPTION NOKEYWORD needs <names>"); return; }
+        } else if (name == "CASEMAP") {
+            if (value != "NONE" && value != "NOTPUBLIC" && value != "ALL") { u.error("OPTION CASEMAP needs NONE, NOTPUBLIC or ALL"); return; }
+        } else if (name == "PROLOGUE" || name == "EPILOGUE") {
+            if (value != "NONE") { u.error("OPTION " + name + " takes only NONE in this version"); return; }
+        } else if (name == "LANGUAGE") {
+            if (value.empty()) { u.error("OPTION LANGUAGE needs a value"); return; }
+        } else {
+            u.error("OPTION " + name + " is not supported in this version");
+            return;
+        }
+        if (k < t.size()) {
+            if (!is_punct(t, k, ',')) { u.error("',' expected"); return; }
+            k++;
+        }
+    }
 }
 
 /* name SEGMENT [READONLY] [ALIGN(n)] ['CODE'|'DATA'] ... name ENDS; blocks nest, and the classic
