@@ -182,6 +182,7 @@ static const Name unary_names[] = {
 };
 
 static const Name shift_names[] = {
+    {"ROL", 0}, {"ROR", 1}, {"RCL", 2}, {"RCR", 3},
     {"SHL", 4}, {"SAL", 4}, {"SHR", 5}, {"SAR", 7},
 };
 
@@ -530,18 +531,26 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         return;
     }
 
-    k = lookup(shift_names, 4, name);
+    k = lookup(shift_names, 8, name);
     if (k >= 0) {
-        if (n != 2 || ops[0].kind == O_IMM || ops[1].kind != O_IMM) {
-            u.error(name + " needs a destination and a constant count in this version");
+        /* by a constant (D1 for 1, C1 ib) or by CL (D3); the byte forms are the even opcodes */
+        bool by_cl = n == 2 && ops[1].kind == O_REG && ops[1].size == 8 && ops[1].reg == 1 && !ops[1].high;
+        if (n != 2 || ops[0].kind == O_IMM || (ops[1].kind != O_IMM && !by_cl)) {
+            u.error(name + " needs a destination and a constant count or CL");
             return;
         }
-        if (!need_size(u, ops[0]) || imm_after_rip(u, ops[0])) return;
+        if (!need_size(u, ops[0])) return;
+        if (by_cl) {
+            rm(c, ops[0].size, k, ops[0], 0xD3);
+            emit(u, c);
+            return;
+        }
         long long v = ops[1].value;
         if (v < 0 || v > 255) { u.error("shift count does not fit"); return; }
         if (v == 1) {
             rm(c, ops[0].size, k, ops[0], 0xD1);
         } else {
+            if (imm_after_rip(u, ops[0])) return;
             rm(c, ops[0].size, k, ops[0], 0xC1);
             put(c, (unsigned)v);
         }
