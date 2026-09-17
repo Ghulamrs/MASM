@@ -49,7 +49,7 @@ Directives: `.CODE`, `.DATA`, `END`, `PUBLIC`, `EXTERN`/`EXTRN` (`name:PROC`, `n
 `name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
 and labels as `DD`/`DQ` values.
 
-Instructions: `MOV ADD OR ADC SBB AND SUB XOR CMP TEST LEA IMUL MUL DIV IDIV NEG NOT INC DEC
+Instructions: `MOV MOVZX MOVSX MOVSXD ADD OR ADC SBB AND SUB XOR CMP TEST LEA IMUL MUL DIV IDIV NEG NOT INC DEC
 SHL SAL SHR SAR PUSH POP CALL JMP Jcc RET NOP CQO CDQ CDQE LEAVE INT3`.
 
 Operands: 64/32/16/8-bit registers (`ah`-`bh` never with a REX prefix, as ml64 rules), constants,

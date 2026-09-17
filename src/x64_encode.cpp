@@ -345,6 +345,27 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         return;
     }
 
+    if (name == "MOVZX" || name == "MOVSX" || name == "MOVSXD") {
+        if (n != 2 || ops[0].kind != O_REG || ops[1].kind == O_IMM || ops[0].size == 8) {
+            u.error(name + " needs a register and a smaller register or memory operand");
+            return;
+        }
+        Operand &d = ops[0];
+        Operand &s = ops[1];
+        if (!need_size(u, s)) return;
+        if (name == "MOVSXD") {
+            if (d.size != 64 || s.size != 32) { u.error("MOVSXD takes a 64-bit register and a 32-bit operand"); return; }
+            rm1(c, true, d.reg, s, 0x63);
+            emit(u, c);
+            return;
+        }
+        if (s.size != 8 && !(s.size == 16 && d.size != 16)) { u.error(name + " needs an 8- or 16-bit operand smaller than the register"); return; }
+        if (d.size == 16) put(c, 0x66);
+        rm2(c, d.size == 64, d.reg, s, 0x0F, (name == "MOVZX" ? 0xB6 : 0xBE) + (s.size == 16 ? 1 : 0));
+        emit(u, c);
+        return;
+    }
+
     if (name == "LEA") {
         if (n != 2 || ops[0].kind != O_REG || ops[1].kind != O_MEM || ops[0].size == 8) {
             u.error("LEA needs a register and a memory operand");
