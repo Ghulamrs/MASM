@@ -128,11 +128,16 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
 {
     std::string w = upper(t[0].text);
 
-    if (w == ".CODE" || w == ".DATA") {
+    if (w == ".CODE" || w == ".DATA" || w == ".CONST" || w == ".DATA?") {
+        /* the simplified segments: .text$mn, .data, .rdata (read-only) and .bss (uninitialised),
+           all 16-aligned, as ml64 names and flags them */
         if (t.size() != 1) u.error("unexpected text after " + w);
         if (proc >= 0) u.error("section change inside PROC");
         if (!segs.empty()) u.error("SEGMENT without ENDS");
-        u.section(w == ".CODE" ? ".text" : ".data", w == ".CODE", false, false, 16);
+        if (w == ".CODE") u.section(".text", true, false, false, 16);
+        else if (w == ".DATA") u.section(".data", false, false, false, 16);
+        else if (w == ".CONST") u.section(".rdata", false, false, true, 16);
+        else u.section(".bss", false, true, false, 16);
         return true;
     }
     if (w == "END") {
