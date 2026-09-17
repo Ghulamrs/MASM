@@ -63,6 +63,7 @@ int Unit::ref(const std::string &name)
     s.bind = B_LOCAL;
     s.defined = false;
     s.function = false;
+    s.type = SYM_UNTYPED;
     s.section = -1;
     s.value = 0;
     s.line = line;
@@ -78,12 +79,13 @@ int Unit::location(int sec, long long off)
     int i = ref(buf);
     Symbol &s = symbols[i];
     s.defined = true;
+    s.type = SYM_NEAR;
     s.section = sec;
     s.value = off;
     return i;
 }
 
-bool Unit::define(const std::string &name)
+bool Unit::define(const std::string &name, int type)
 {
     if (!cur())
         return false;
@@ -94,6 +96,7 @@ bool Unit::define(const std::string &name)
         return false;
     }
     s.defined = true;
+    s.type = type;
     s.section = current;
     s.value = (long long)here();
     s.line = line;

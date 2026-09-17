@@ -420,6 +420,18 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         if (d.kind == O_MEM && s.kind == O_MEM) { u.error("two memory operands"); return; }
         bool mov = name == "MOV";
         bool test = name == "TEST";
+        if (mov && d.kind == O_REG && d.size == 64 && s.kind == O_MEM && s.label && s.near && !s.ptr) {
+            /* mov r64, code_label or [code_label]: the address, 48 B8+r imm64 with an ADDR64 */
+            put(c, 0x48 | ((d.reg & 8) ? 1 : 0));
+            put(c, 0xB8 | (d.reg & 7));
+            c.disp_at = c.n;
+            c.sym = s.sym;
+            c.kind = R_ADDR64;
+            for (int i = 0; i < 8; i++)
+                put(c, (unsigned)((unsigned long long)s.value >> (8 * i)) & 0xFF);
+            emit(u, c);
+            return;
+        }
         if (s.kind != O_IMM) {
             if (!same_size(u, d, s)) return;
             int size = d.size;
@@ -587,10 +599,12 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         bool call = name == "CALL";
         if (n != 1 || ops[0].kind == O_IMM) { u.error(name + " needs a target"); return; }
         Operand &o = ops[0];
-        if (o.kind == O_MEM && o.label && o.size == 0) {
+        if (o.kind == O_MEM && o.label && (o.near || o.size == 0)) {
+            /* a code label, or one not typed yet: a direct call or jump */
             rel32(u, -1, call ? 0xE8 : 0xE9, o.sym);
             return;
         }
+        /* a data label or QWORD PTR: through the qword, FF /2 or FF /4, as ml64 */
         if (o.size != 64) { u.error(name + " needs a 64-bit register or QWORD PTR"); return; }
         rm1(c, false, call ? 2 : 4, o, 0xFF);
         emit(u, c);
@@ -599,7 +613,7 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
 
     k = lookup(jcc_names, 30, name);
     if (k >= 0) {
-        if (n != 1 || ops[0].kind != O_MEM || !ops[0].label) {
+        if (n != 1 || ops[0].kind != O_MEM || !ops[0].label || (ops[0].size != 0 && !ops[0].near)) {
             u.error(name + " needs a label");
             return;
         }

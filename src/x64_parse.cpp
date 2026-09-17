@@ -92,7 +92,7 @@ bool X64Target::finished() const
 void X64Target::statement(Unit &u, std::vector<Token> &t)
 {
     if (t.size() >= 2 && t[0].kind == T_NAME && is_punct(t, 1, ':')) {
-        u.define(t[0].text);
+        u.define(t[0].text, SYM_NEAR);
         t.erase(t.begin(), t.begin() + 2);
         if (t.empty())
             return;
@@ -201,6 +201,14 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
                 } else {
                     sym.bind = B_EXTERN;
                     sym.function = type == "PROC";
+                    if (type == "PROC" || type == "NEAR" || type == "FAR") sym.type = SYM_NEAR;
+                    else if (type == "BYTE") sym.type = 1;
+                    else if (type == "WORD") sym.type = 2;
+                    else if (type == "DWORD" || type == "REAL4") sym.type = 4;
+                    else if (type == "QWORD" || type == "REAL8") sym.type = 8;
+                    else if (type == "XMMWORD" || type == "OWORD") sym.type = 16;
+                    else if (type == "ABS" || type.empty()) sym.type = SYM_UNTYPED;
+                    else { u.error("unknown EXTERN type '" + type + "'"); return true; }
                 }
             }
             if (k < t.size() && !is_punct(t, k, ',')) {
@@ -283,7 +291,7 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
             u.section(".xdata", false, false, true, 8);
             u.current = save;
         }
-        if (!u.define(t[0].text)) return true;
+        if (!u.define(t[0].text, SYM_NEAR)) return true;
         proc = u.find(t[0].text);
         u.symbols[proc].function = true;
         if (global) u.symbols[proc].bind = B_GLOBAL;
@@ -313,7 +321,7 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     }
     width = data_width(w2);
     if (width) {
-        if (u.define(t[0].text))
+        if (u.define(t[0].text, width))
             data(u, t, 2, width);
         return true;
     }
@@ -471,7 +479,7 @@ void X64Target::end_frame(Unit &u)
     u.section(".xdata", false, false, true, 8);
     unsigned long xoff = u.here();
     if (xdatasym < 0) {
-        if (!u.define("$xdatasym")) { u.current = save; return; }
+        if (!u.define("$xdatasym", SYM_UNTYPED)) { u.current = save; return; }
         xdatasym = u.find("$xdatasym");
     }
     for (size_t i = 0; i < x.size(); i++)
@@ -638,14 +646,19 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
     o.high = false;
     o.rexonly = false;
     o.wide = false;
+    o.ptr = false;
+    o.near = false;
 
     int ptr = ptr_size(t, a);
-    if (ptr) {
+    bool near_ptr = is_word(t, a, "NEAR");
+    if (ptr || near_ptr) {
         if (!is_word(t, a + 1, "PTR")) {
             u.error("PTR expected");
             return false;
         }
         o.size = ptr;
+        o.ptr = ptr != 0;
+        o.near = near_ptr;
         a += 2;
         if (a >= b) {
             u.error("memory operand expected");
@@ -704,8 +717,12 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
         i++;
     }
     if (start < b) { ranges.push_back(start); ranges.push_back(b); }
-    if (bracket)
-        return memory(u, t, ranges, o);
+    if (bracket) {
+        if (!memory(u, t, ranges, o))
+            return false;
+        typed(u, o);
+        return true;
+    }
 
     Value v;
     std::string err;
@@ -727,6 +744,7 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
         o.sym = v.sec >= 0 ? u.location(v.sec, v.v) : v.sym;
         o.value = v.sec >= 0 ? 0 : v.v;
         o.label = true;
+        typed(u, o);
         return true;
     }
     if (o.size) {
@@ -736,6 +754,17 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
     o.value = v.v;
     o.wide = v.wide;
     return true;
+}
+
+/* a bare label takes its symbol's type: a data label's width when no PTR said one, or NEAR for a
+   code label or PROC (whose bare use in MOV is its address, as ml64 reads it) */
+void X64Target::typed(Unit &u, Operand &o)
+{
+    if (!o.label || o.sym < 0)
+        return;
+    const Symbol &sy = u.symbols[o.sym];
+    if (sy.type == SYM_NEAR) o.near = true;
+    else if (sy.type > 0 && !o.ptr && o.size == 0) o.size = sy.type * 8;
 }
 
 /* the address terms: registers with an optional scale, and expressions that may carry one label */

@@ -18,6 +18,8 @@ struct Operand {
     bool high;      /* AH, BH, CH or DH: never with a REX prefix */
     bool rexonly;   /* SPL, BPL, SIL or DIL: only with a REX prefix */
     bool wide;      /* an immediate spelled with 2^32 or more (MOV r64 takes the 64-bit form) */
+    bool ptr;       /* the size was written as a PTR (not taken from the label's type) */
+    bool near;      /* a code label (a NEAR label or PROC): its bare use is its address */
 };
 
 struct Code {
@@ -55,6 +57,7 @@ private:
     bool directive(Unit &u, std::vector<Token> &t);
     void segment(Unit &u, const std::vector<Token> &t);
     void option(Unit &u, const std::vector<Token> &t);
+    void typed(Unit &u, Operand &o);
     void unwind(Unit &u, const std::vector<Token> &t, const std::string &w);
     void end_frame(Unit &u);
     void data(Unit &u, const std::vector<Token> &t, size_t from, int width);

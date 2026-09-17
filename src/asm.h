@@ -34,11 +34,14 @@ struct Section {
 
 enum SymBind { B_LOCAL, B_GLOBAL, B_EXTERN, B_CONST };
 
+enum { SYM_UNTYPED = 0, SYM_NEAR = -1 };   /* Symbol::type: a code label, or the width of a data label */
+
 struct Symbol {
     std::string name;
     SymBind bind;
     bool defined;
     bool function;
+    int type;       /* SYM_NEAR, SYM_UNTYPED, or 1, 2, 4, 8, 16 bytes */
     int section;
     long long value;
     int line;
@@ -85,7 +88,7 @@ public:
     int find(const std::string &name) const;
     int ref(const std::string &name);
     int location(int sec, long long off);
-    bool define(const std::string &name);
+    bool define(const std::string &name, int type);
     bool constant(const std::string &name, long long v);
 
     void emit8(unsigned v);
