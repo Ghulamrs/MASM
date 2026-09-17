@@ -1,14 +1,27 @@
 #include "asm.h"
 
+/* Expressions are evaluated with explicit operand and operator stacks, not recursion, so a
+   10,000-deep parenthesis or minus chain costs heap, not the job thread's stack (ml64 takes
+   both). Precedence follows MASM's table: unary + -, then * / MOD SHL SHR, then + -, then the
+   comparisons, NOT, AND, then OR XOR. */
+
+enum OpKind { OP_PAREN, OP_PREFIX, OP_BINARY };
+
+struct Op {
+    int kind;
+    int prec;       /* higher binds tighter */
+    char c;         /* the operator: + - * / % < > & | ^ ~ N L H O I E ... (see the tables) */
+};
+
 struct ExprState {
     Unit *u;
     const std::vector<Token> *t;
     size_t pos;
     size_t end;
     std::string err;
+    std::vector<Value> vals;
+    std::vector<Op> ops;
 };
-
-static bool sum(ExprState &e, Value &v);
 
 static void clear(Value &v)
 {
@@ -47,125 +60,12 @@ bool located(const Unit &u, const Value &x, int &sec, long long &off)
     return false;
 }
 
-static bool at(ExprState &e, char c)
-{
-    return e.pos < e.end && is_punct(*e.t, e.pos, c);
-}
-
-static bool word(ExprState &e, const char *w)
-{
-    return e.pos < e.end && (*e.t)[e.pos].kind == T_NAME && upper((*e.t)[e.pos].text) == w;
-}
-
 static bool not_const(ExprState &e, const Value &v)
 {
     if (is_const(v))
         return false;
     if (v.sym >= 0) e.err = "'" + e.u->symbols[v.sym].name + "' is not a constant";
     else e.err = "'$' is not a constant";
-    return true;
-}
-
-static bool atom(ExprState &e, Value &v)
-{
-    clear(v);
-    if (e.pos >= e.end) {
-        e.err = "expression expected";
-        return false;
-    }
-    const Token &k = (*e.t)[e.pos];
-    if (at(e, '-') || at(e, '+')) {
-        bool neg = k.text[0] == '-';
-        e.pos++;
-        if (!atom(e, v)) return false;
-        if (neg) {
-            if (not_const(e, v)) return false;
-            v.v = -v.v;
-        }
-        return true;
-    }
-    if (at(e, '(')) {
-        e.pos++;
-        if (!sum(e, v)) return false;
-        if (!at(e, ')')) {
-            e.err = "')' expected";
-            return false;
-        }
-        e.pos++;
-        return true;
-    }
-    if (k.kind == T_NUM) {
-        v.v = k.value;
-        v.wide = k.wide;
-        e.pos++;
-        return true;
-    }
-    if (k.kind == T_STR) {
-        /* a character constant: up to eight characters, the first the most significant, as ml64 */
-        if (k.text.empty() || k.text.size() > 8) {
-            e.err = "a character constant needs one to eight characters";
-            return false;
-        }
-        for (size_t i = 0; i < k.text.size(); i++)
-            v.v = (long long)(((unsigned long long)v.v << 8) | (unsigned char)k.text[i]);
-        e.pos++;
-        return true;
-    }
-    if (k.kind == T_NAME) {
-        if (k.text == "$") {
-            if (e.u->current < 0) {
-                e.err = "no section open (use .CODE or .DATA)";
-                return false;
-            }
-            v.sec = e.u->current;
-            v.v = (long long)e.u->here();
-            e.pos++;
-            return true;
-        }
-        if (word(e, "IMAGEREL") || word(e, "OFFSET")) {
-            bool image = word(e, "IMAGEREL");
-            e.pos++;
-            if (!atom(e, v)) return false;
-            if (v.sym < 0 || v.sub >= 0 || v.imagerel || v.offset) {
-                e.err = std::string(image ? "IMAGEREL" : "OFFSET") + " needs a label";
-                return false;
-            }
-            if (image) v.imagerel = true;
-            else v.offset = true;
-            return true;
-        }
-        int s = e.u->find(k.text);
-        if (s >= 0 && e.u->symbols[s].bind == B_CONST)
-            v.v = e.u->symbols[s].value;
-        else
-            v.sym = e.u->ref(k.text);
-        e.pos++;
-        return true;
-    }
-    e.err = "unexpected '" + k.text + "'";
-    return false;
-}
-
-static bool product(ExprState &e, Value &v)
-{
-    if (!atom(e, v)) return false;
-    while (at(e, '*') || at(e, '/')) {
-        char op = (*e.t)[e.pos].text[0];
-        e.pos++;
-        Value r;
-        if (!atom(e, r)) return false;
-        if (not_const(e, v) || not_const(e, r)) return false;
-        if (op == '*') {
-            v.v = v.v * r.v;
-        } else {
-            if (r.v == 0) {
-                e.err = "division by zero";
-                return false;
-            }
-            v.v = v.v / r.v;
-        }
-        v.wide = v.wide || r.wide;
-    }
     return true;
 }
 
@@ -221,17 +121,117 @@ static bool sub(ExprState &e, Value &a, const Value &b)
     return false;
 }
 
-static bool sum(ExprState &e, Value &v)
+static bool binary(ExprState &e, char op, Value &a, const Value &b)
 {
-    if (!product(e, v)) return false;
-    while (at(e, '+') || at(e, '-')) {
-        char op = (*e.t)[e.pos].text[0];
-        e.pos++;
-        Value r;
-        if (!product(e, r)) return false;
-        if (!(op == '+' ? add(e, v, r) : sub(e, v, r))) return false;
+    if (op == '+') return add(e, a, b);
+    if (op == '-') return sub(e, a, b);
+    if (not_const(e, a) || not_const(e, b)) return false;
+    a.wide = a.wide || b.wide;
+    long long x = a.v;
+    long long y = b.v;
+    switch (op) {
+    case '*': a.v = x * y; return true;
+    case '/':
+    case '%':
+        if (y == 0) { e.err = "division by zero"; return false; }
+        a.v = op == '/' ? x / y : x % y;
+        return true;
     }
+    e.err = "bad operator";
+    return false;
+}
+
+static bool prefix(ExprState &e, char op, Value &v)
+{
+    if (op == '+')
+        return true;
+    if (op == 'I' || op == 'O') {
+        if (v.sym < 0 || v.sub >= 0 || v.imagerel || v.offset) {
+            e.err = std::string(op == 'I' ? "IMAGEREL" : "OFFSET") + " needs a label";
+            return false;
+        }
+        if (op == 'I') v.imagerel = true;
+        else v.offset = true;
+        return true;
+    }
+    if (not_const(e, v)) return false;
+    if (op == '-') v.v = -v.v;
     return true;
+}
+
+static bool reduce(ExprState &e)
+{
+    Op op = e.ops.back();
+    e.ops.pop_back();
+    if (op.kind == OP_PREFIX)
+        return prefix(e, op.c, e.vals.back());
+    Value b = e.vals.back();
+    e.vals.pop_back();
+    return binary(e, op.c, e.vals.back(), b);
+}
+
+/* the binary operators: punctuation or a name, with MASM's precedence */
+static bool binary_op(const Token &k, Op &op)
+{
+    op.kind = OP_BINARY;
+    if (k.kind == T_PUNCT) {
+        char c = k.text[0];
+        if (c == '*' || c == '/') { op.prec = 6; op.c = c; return true; }
+        if (c == '+' || c == '-') { op.prec = 5; op.c = c; return true; }
+        return false;
+    }
+    return false;
+}
+
+/* the prefix operators */
+static bool prefix_op(const Token &k, Op &op)
+{
+    op.kind = OP_PREFIX;
+    if (k.kind == T_PUNCT && (k.text[0] == '+' || k.text[0] == '-')) { op.prec = 7; op.c = k.text[0]; return true; }
+    if (k.kind != T_NAME) return false;
+    std::string w = upper(k.text);
+    if (w == "OFFSET") { op.prec = 9; op.c = 'O'; return true; }
+    if (w == "IMAGEREL") { op.prec = 9; op.c = 'I'; return true; }
+    return false;
+}
+
+static bool atom(ExprState &e, const Token &k, Value &v)
+{
+    clear(v);
+    if (k.kind == T_NUM) {
+        v.v = k.value;
+        v.wide = k.wide;
+        return true;
+    }
+    if (k.kind == T_STR) {
+        /* a character constant: up to eight characters, the first the most significant, as ml64 */
+        if (k.text.empty() || k.text.size() > 8) {
+            e.err = "a character constant needs one to eight characters";
+            return false;
+        }
+        for (size_t i = 0; i < k.text.size(); i++)
+            v.v = (long long)(((unsigned long long)v.v << 8) | (unsigned char)k.text[i]);
+        return true;
+    }
+    if (k.kind == T_NAME) {
+        if (k.text == "$") {
+            if (e.u->current < 0) {
+                e.err = "no section open (use .CODE or .DATA)";
+                return false;
+            }
+            v.sec = e.u->current;
+            v.v = (long long)e.u->here();
+            return true;
+        }
+        int s = e.u->find(k.text);
+        if (s >= 0 && e.u->symbols[s].bind == B_CONST)
+            v.v = e.u->symbols[s].value;
+        else
+            v.sym = e.u->ref(k.text);
+        return true;
+    }
+    e.err = "unexpected '" + k.text + "'";
+    return false;
 }
 
 bool eval(Unit &u, const std::vector<Token> &t, size_t from, size_t to, Value &v, std::string &err)
@@ -241,14 +241,49 @@ bool eval(Unit &u, const std::vector<Token> &t, size_t from, size_t to, Value &v
     e.t = &t;
     e.pos = from;
     e.end = to;
-    if (!sum(e, v)) {
-        err = e.err;
+    bool want_operand = true;
+    while (e.pos < e.end) {
+        const Token &k = t[e.pos];
+        Op op;
+        if (want_operand) {
+            if (is_punct(t, e.pos, '(')) {
+                op.kind = OP_PAREN;
+                op.prec = 0;
+                op.c = '(';
+                e.ops.push_back(op);
+            } else if (prefix_op(k, op)) {
+                e.ops.push_back(op);
+            } else {
+                Value x;
+                if (!atom(e, k, x)) { err = e.err; return false; }
+                e.vals.push_back(x);
+                want_operand = false;
+            }
+        } else if (is_punct(t, e.pos, ')')) {
+            while (!e.ops.empty() && e.ops.back().kind != OP_PAREN)
+                if (!reduce(e)) { err = e.err; return false; }
+            if (e.ops.empty()) { err = "unexpected ')'"; return false; }
+            e.ops.pop_back();
+        } else if (binary_op(k, op)) {
+            while (!e.ops.empty() && e.ops.back().kind != OP_PAREN && e.ops.back().prec >= op.prec)
+                if (!reduce(e)) { err = e.err; return false; }
+            e.ops.push_back(op);
+            want_operand = true;
+        } else {
+            err = "unexpected '" + k.text + "'";
+            return false;
+        }
+        e.pos++;
+    }
+    if (want_operand) {
+        err = e.vals.empty() && e.ops.empty() ? "expression expected" : "expression expected";
         return false;
     }
-    if (e.pos != e.end) {
-        err = "unexpected '" + t[e.pos].text + "'";
-        return false;
+    while (!e.ops.empty()) {
+        if (e.ops.back().kind == OP_PAREN) { err = "')' expected"; return false; }
+        if (!reduce(e)) { err = e.err; return false; }
     }
+    v = e.vals.back();
     return true;
 }
 
