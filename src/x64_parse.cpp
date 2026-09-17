@@ -1,4 +1,5 @@
 #include "x64.h"
+#include <cstdio>
 #include <cstdlib>
 
 struct RegName {
@@ -220,12 +221,20 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
         return true;
     }
     if (w == "ALIGN") {
+        /* a power of two no larger than the section's own alignment, or the padding would not be
+           honoured once the linker places the section (ml64's A2189) */
         long long n;
         std::string err;
+        char buf[32];
         if (!eval_const(u, t, 1, t.size(), n, err)) { u.error(err); return true; }
-        if (n <= 0 || n > 4096 || (n & (n - 1))) { u.error("ALIGN needs a power of two"); return true; }
+        if (n <= 0 || (n & (n - 1))) { u.error("ALIGN needs a power of two"); return true; }
         Section *s = u.cur();
         if (!s) return true;
+        if (n > s->align) {
+            snprintf(buf, sizeof buf, "%lld", n);
+            u.error(std::string("invalid combination with segment alignment : ") + buf);
+            return true;
+        }
         while (u.here() % (unsigned long)n)
             u.emit8(s->code ? 0x90 : 0);
         return true;

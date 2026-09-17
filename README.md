@@ -55,7 +55,7 @@ uninitialised `C0000080`, plus the alignment field), `END`, `PUBLIC`, `EXTERN`/`
 and the like (ignored), `name PROC [PUBLIC|PRIVATE] [FRAME]` with `.PUSHREG`, `.ALLOCSTACK`, `.SETFRAME`,
 `.SAVEREG`, `.SAVEXMM128`, `.PUSHFRAME` and `.ENDPROLOG` (the UNWIND_INFO goes to `.xdata` and the
 RUNTIME_FUNCTION to `.pdata`, relocated against the PROC and one Static `$xdatasym` exactly as ml64 writes them),
-`name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n`, `ORG $+n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
+`name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n` (a power of two up to the section's alignment, as ml64's A2189 requires), `ORG $+n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
 labels as `DD`/`DQ` values (`DQ v+8` keeps the addend in place, as COFF does), `DD IMAGEREL label`
 (ADDR32NB), and label differences `DB L2-L1` (folded when both are known, written at the end otherwise).
 
