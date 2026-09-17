@@ -17,6 +17,7 @@ struct Operand {
     bool label;
     bool high;      /* AH, BH, CH or DH: never with a REX prefix */
     bool rexonly;   /* SPL, BPL, SIL or DIL: only with a REX prefix */
+    bool wide;      /* an immediate spelled with 2^32 or more (MOV r64 takes the 64-bit form) */
 };
 
 struct Code {
@@ -46,7 +47,7 @@ private:
     void segment(Unit &u, const std::vector<Token> &t);
     void data(Unit &u, const std::vector<Token> &t, size_t from, int width);
     bool operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b, Operand &o);
-    bool memory(Unit &u, const std::vector<Token> &t, size_t a, size_t b, Operand &o);
+    bool memory(Unit &u, const std::vector<Token> &t, const std::vector<size_t> &ranges, Operand &o);
     void instruction(Unit &u, const std::string &name, std::vector<Operand> &ops);
 };
 

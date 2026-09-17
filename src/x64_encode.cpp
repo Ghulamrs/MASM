@@ -81,22 +81,25 @@ static void rm_code(Code &c, bool w, int regf, const Operand &m, const unsigned 
         put(c, 0xC0 | r | (m.reg & 7));
         return;
     }
-    if (m.sym >= 0) {
+    if (m.sym >= 0 && m.base < 0 && m.index < 0) {
         put(c, 0x05 | r);
         c.disp_at = c.n;
         c.sym = m.sym;
         put32(c, m.value);
         return;
     }
+    /* a label with registers is an absolute 32-bit address (ADDR32), as ml64 makes it */
     int sb = m.scale == 8 ? 3 : m.scale == 4 ? 2 : m.scale == 2 ? 1 : 0;
     if (m.base < 0) {
         put(c, 0x04 | r);
         put(c, (sb << 6) | ((m.index < 0 ? 4 : m.index & 7) << 3) | 5);
+        if (m.sym >= 0) { c.disp_at = c.n; c.sym = m.sym; c.kind = R_ADDR32; }
         put32(c, m.value);
         return;
     }
     int mod;
-    if (m.value == 0 && (m.base & 7) != 5) mod = 0x00;
+    if (m.sym >= 0) mod = 0x80;
+    else if (m.value == 0 && (m.base & 7) != 5) mod = 0x00;
     else if (fits8(m.value)) mod = 0x40;
     else mod = 0x80;
     if (m.index < 0 && (m.base & 7) != 4) {
@@ -106,7 +109,10 @@ static void rm_code(Code &c, bool w, int regf, const Operand &m, const unsigned 
         put(c, (sb << 6) | ((m.index < 0 ? 4 : m.index & 7) << 3) | (m.base & 7));
     }
     if (mod == 0x40) put(c, (unsigned)m.value & 0xFF);
-    else if (mod == 0x80) put32(c, m.value);
+    else if (mod == 0x80) {
+        if (m.sym >= 0) { c.disp_at = c.n; c.sym = m.sym; c.kind = R_ADDR32; }
+        put32(c, m.value);
+    }
 }
 
 static void rm1(Code &c, bool w, int regf, const Operand &m, unsigned op)
@@ -311,12 +317,17 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         if (!need_size(u, d) || imm_after_rip(u, d)) return;
         int size = d.size;
         long long v = s.value;
-        if (mov && d.kind == O_REG && size == 64 && !fits32(v)) {
+        if (s.sym >= 0 && !(mov && d.kind == O_REG && size == 64)) {
+            u.error("OFFSET is only taken by MOV into a 64-bit register in this version");
+            return;
+        }
+        if (mov && d.kind == O_REG && size == 64 && (s.sym >= 0 || !fits32(v))) {
             put(c, 0x48 | ((d.reg & 8) ? 1 : 0));
             put(c, 0xB8 | (d.reg & 7));
-            u.emit8(c.b[0]);
-            u.emit8(c.b[1]);
-            u.emit64((unsigned long long)v);
+            if (s.sym >= 0) { c.disp_at = c.n; c.sym = s.sym; c.kind = R_ADDR64; }
+            for (int i = 0; i < 8; i++)
+                put(c, (unsigned)((unsigned long long)v >> (8 * i)) & 0xFF);
+            emit(u, c);
             return;
         }
         if (!imm_fits(u, size, v)) return;

@@ -177,12 +177,27 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     if (w == "ALIGN") {
         long long n;
         std::string err;
-        if (!eval(u, t, 1, t.size(), n, err)) { u.error(err); return true; }
+        if (!eval_const(u, t, 1, t.size(), n, err)) { u.error(err); return true; }
         if (n <= 0 || n > 4096 || (n & (n - 1))) { u.error("ALIGN needs a power of two"); return true; }
         Section *s = u.cur();
         if (!s) return true;
         while (u.here() % (unsigned long)n)
             u.emit8(s->code ? 0x90 : 0);
+        return true;
+    }
+    if (w == "ORG") {
+        /* ORG $+n: skip forward, the gap zero-filled as ml64 leaves it */
+        Value v;
+        std::string err;
+        int sec;
+        long long off;
+        Section *s = u.cur();
+        if (!s) return true;
+        if (!eval(u, t, 1, t.size(), v, err)) { u.error(err); return true; }
+        if (!located(u, v, sec, off) || sec != u.current) { u.error("ORG needs a location in the current section"); return true; }
+        if (off < (long long)u.here()) { u.error("ORG cannot move backwards in this version"); return true; }
+        while ((long long)u.here() < off)
+            u.emit8(0);
         return true;
     }
     int width = data_width(w);
@@ -231,7 +246,7 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     if (w2 == "EQU") {
         long long v;
         std::string err;
-        if (!eval(u, t, 2, t.size(), v, err)) u.error(err);
+        if (!eval_const(u, t, 2, t.size(), v, err)) u.error(err);
         else u.constant(t[0].text, v);
         return true;
     }
@@ -325,7 +340,6 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
         size_t a = cuts[c];
         size_t b = cuts[c + 1] - 1;
         std::string err;
-        long long v;
         if (a >= b) {
             u.error("value expected");
             return;
@@ -334,7 +348,8 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
             put(u, width, 0);
             continue;
         }
-        if (sec->bss && !(dup_at(t, a, b) < b && dup_at(t, a, b) + 4 == b && t[dup_at(t, a, b) + 2].text == "?")) {
+        size_t dup = dup_at(t, a, b);
+        if (sec->bss && !(dup < b && dup + 4 == b && t[dup + 2].text == "?")) {
             u.error("initialised data in an uninitialised section");
             return;
         }
@@ -344,10 +359,9 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
                 u.emit8((unsigned char)t[a].text[k]);
             continue;
         }
-        size_t dup = dup_at(t, a, b);
         if (dup < b) {
             long long count;
-            if (!eval(u, t, a, dup, count, err)) { u.error(err); return; }
+            if (!eval_const(u, t, a, dup, count, err)) { u.error(err); return; }
             if (count < 0 || count > 100000000) { u.error("bad DUP count"); return; }
             if (!is_punct(t, dup + 1, '(') || !is_punct(t, b - 1, ')') || dup + 2 >= b - 1) {
                 u.error("DUP needs a value in parentheses");
@@ -355,28 +369,31 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
             }
             long long fill = 0;
             if (!(dup + 4 == b && t[dup + 2].kind == T_NAME && t[dup + 2].text == "?")) {
-                if (!eval(u, t, dup + 2, b - 1, fill, err)) { u.error(err); return; }
+                if (!eval_const(u, t, dup + 2, b - 1, fill, err)) { u.error(err); return; }
                 if (!fits(width, fill)) { u.error("value does not fit"); return; }
             }
             for (long long k = 0; k < count; k++)
                 put(u, width, fill);
             continue;
         }
-        if (b - a == 1 && t[a].kind == T_NAME) {
-            int s = u.find(t[a].text);
-            if (s < 0 || u.symbols[s].bind != B_CONST) {
-                if (width < 4) {
-                    u.error("an address needs DD or DQ");
-                    return;
-                }
-                u.fixup(u.here(), u.ref(t[a].text), width == 8 ? R_ADDR64 : R_ADDR32);
-                put(u, width, 0);
-                continue;
-            }
-        }
+        Value v;
         if (!eval(u, t, a, b, v, err)) { u.error(err); return; }
-        if (!fits(width, v)) { u.error("value does not fit"); return; }
-        put(u, width, v);
+        if (v.sec >= 0) { u.error("'$' cannot be stored as data in this version"); return; }
+        if (v.sym >= 0 && v.sub >= 0) {
+            /* a label difference: written once both labels are known */
+            u.difference(u.here(), v.sym, v.sub, width);
+            put(u, width, v.v);
+            continue;
+        }
+        if (v.sym >= 0) {
+            if (v.imagerel && width != 4) { u.error("IMAGEREL needs DD"); return; }
+            if (width < 4) { u.error("an address needs DD or DQ"); return; }
+            u.fixup(u.here(), v.sym, v.imagerel ? R_ADDR32NB : width == 8 ? R_ADDR64 : R_ADDR32);
+            put(u, width, v.v);
+            continue;
+        }
+        if (!fits(width, v.v)) { u.error("value does not fit"); return; }
+        put(u, width, v.v);
     }
 }
 
@@ -393,6 +410,7 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
     o.label = false;
     o.high = false;
     o.rexonly = false;
+    o.wide = false;
 
     int ptr = ptr_size(t, a);
     if (ptr) {
@@ -422,121 +440,186 @@ bool X64Target::operand(Unit &u, const std::vector<Token> &t, size_t a, size_t b
             return true;
         }
     }
-    if (is_punct(t, a, '[')) {
-        if (!is_punct(t, b - 1, ']') || b - a < 3) {
-            u.error("']' expected");
-            return false;
+
+    /* bracket groups at depth 0, and the text between them, are all address terms: [rbx+8],
+       8[rbx], [rbx][rcx*4], name[rcx] */
+    std::vector<size_t> ranges;
+    bool bracket = false;
+    size_t start = a;
+    int depth = 0;
+    for (size_t i = a; i < b; ) {
+        if (depth == 0 && is_punct(t, i, '[')) {
+            if (i > start) { ranges.push_back(start); ranges.push_back(i); }
+            size_t j = i + 1;
+            int d = 1;
+            while (j < b && d) {
+                if (is_punct(t, j, '[')) d++;
+                else if (is_punct(t, j, ']')) d--;
+                if (d) j++;
+            }
+            if (j >= b) {
+                u.error("']' expected");
+                return false;
+            }
+            if (j == i + 1) {
+                u.error("empty brackets");
+                return false;
+            }
+            ranges.push_back(i + 1);
+            ranges.push_back(j);
+            bracket = true;
+            i = j + 1;
+            start = i;
+            continue;
         }
-        return memory(u, t, a + 1, b - 1, o);
+        if (is_punct(t, i, '(')) depth++;
+        else if (is_punct(t, i, ')')) depth--;
+        i++;
     }
-    if (b - a == 1 && t[a].kind == T_NAME) {
-        int s = u.find(t[a].text);
-        if (s < 0 || u.symbols[s].bind != B_CONST) {
-            o.kind = O_MEM;
-            o.sym = u.ref(t[a].text);
-            o.label = true;
-            return true;
-        }
+    if (start < b) { ranges.push_back(start); ranges.push_back(b); }
+    if (bracket)
+        return memory(u, t, ranges, o);
+
+    Value v;
+    std::string err;
+    if (!eval(u, t, a, b, v, err)) {
+        u.error(err);
+        return false;
+    }
+    if (v.sub >= 0) {
+        u.error("a label difference needs both labels defined before it");
+        return false;
+    }
+    if (v.offset) {
+        o.sym = v.sym;
+        o.value = v.v;
+        return true;
+    }
+    if (v.sym >= 0 || v.sec >= 0) {
+        o.kind = O_MEM;
+        o.sym = v.sec >= 0 ? u.location(v.sec, v.v) : v.sym;
+        o.value = v.sec >= 0 ? 0 : v.v;
+        o.label = true;
+        return true;
     }
     if (o.size) {
         u.error("memory operand expected after PTR");
         return false;
     }
-    std::string err;
-    if (!eval(u, t, a, b, o.value, err)) {
-        u.error(err);
-        return false;
-    }
+    o.value = v.v;
+    o.wide = v.wide;
     return true;
 }
 
-bool X64Target::memory(Unit &u, const std::vector<Token> &t, size_t a, size_t b, Operand &o)
+/* the address terms: registers with an optional scale, and expressions that may carry one label */
+bool X64Target::memory(Unit &u, const std::vector<Token> &t, const std::vector<size_t> &ranges, Operand &o)
 {
     o.kind = O_MEM;
-    size_t k = a;
-    while (k < b) {
-        int sign = 1;
-        if (is_punct(t, k, '+') || is_punct(t, k, '-')) {
-            if (t[k].text[0] == '-') sign = -1;
-            k++;
-        }
-        size_t e = k;
-        int depth = 0;
-        while (e < b) {
-            if (is_punct(t, e, '(')) depth++;
-            else if (is_punct(t, e, ')')) depth--;
-            else if (depth == 0 && e > k && (is_punct(t, e, '+') || is_punct(t, e, '-'))) break;
-            e++;
-        }
-        if (e == k) {
-            u.error("address term expected");
-            return false;
-        }
-        const RegName *r = find_reg(t[k]);
-        const RegName *r2 = e - k == 3 ? find_reg(t[e - 1]) : 0;
-        if (r || r2) {
-            int num;
-            int size;
-            int scale = 1;
-            if (e - k == 1) {
-                num = r->num;
-                size = r->size;
-            } else if (e - k == 3 && is_punct(t, k + 1, '*') && (r ? t[e - 1].kind == T_NUM : t[k].kind == T_NUM)) {
-                const RegName *q = r ? r : r2;
-                num = q->num;
-                size = q->size;
-                scale = (int)(r ? t[e - 1].value : t[k].value);
-                if (scale != 1 && scale != 2 && scale != 4 && scale != 8) {
-                    u.error("scale must be 1, 2, 4 or 8");
+    Value acc;
+    acc.v = 0; acc.sym = -1; acc.sub = -1; acc.sec = -1; acc.imagerel = false; acc.offset = false; acc.wide = false;
+    for (size_t r = 0; r + 1 < ranges.size(); r += 2) {
+        size_t a = ranges[r];
+        size_t b = ranges[r + 1];
+        size_t k = a;
+        while (k < b) {
+            int sign = 1;
+            if (is_punct(t, k, '+') || is_punct(t, k, '-')) {
+                if (t[k].text[0] == '-') sign = -1;
+                k++;
+            }
+            size_t e = k;
+            int depth = 0;
+            while (e < b) {
+                if (is_punct(t, e, '(')) depth++;
+                else if (is_punct(t, e, ')')) depth--;
+                else if (depth == 0 && e > k && (is_punct(t, e, '+') || is_punct(t, e, '-'))) break;
+                e++;
+            }
+            if (e == k) {
+                u.error("address term expected");
+                return false;
+            }
+            const RegName *r1 = find_reg(t[k]);
+            const RegName *r2 = e - k == 3 ? find_reg(t[e - 1]) : 0;
+            if (r1 || r2) {
+                int num;
+                int size;
+                int scale = 1;
+                if (e - k == 1) {
+                    num = r1->num;
+                    size = r1->size;
+                } else if (e - k == 3 && is_punct(t, k + 1, '*') && (r1 ? t[e - 1].kind == T_NUM : t[k].kind == T_NUM)) {
+                    const RegName *q = r1 ? r1 : r2;
+                    num = q->num;
+                    size = q->size;
+                    scale = (int)(r1 ? t[e - 1].value : t[k].value);
+                    if (scale != 1 && scale != 2 && scale != 4 && scale != 8) {
+                        u.error("scale must be 1, 2, 4 or 8");
+                        return false;
+                    }
+                } else {
+                    u.error("bad register term in address");
+                    return false;
+                }
+                if (sign < 0) {
+                    u.error("a register cannot be subtracted");
+                    return false;
+                }
+                if (size != 64) {
+                    u.error("only 64-bit registers can address memory in this version");
+                    return false;
+                }
+                if (scale == 1 && o.base < 0 && e - k == 1) {
+                    o.base = num;
+                } else if (o.index < 0) {
+                    if (num == 4 && scale == 1 && o.base >= 0 && o.base != 4) {
+                        /* [rax+rsp]: rsp can only be the base, so the other register indexes */
+                        o.index = o.base;
+                        o.base = 4;
+                    } else if (num == 4) {
+                        u.error("RSP cannot be an index");
+                        return false;
+                    } else {
+                        o.index = num;
+                        o.scale = scale;
+                    }
+                } else {
+                    u.error("too many registers in address");
                     return false;
                 }
             } else {
-                u.error("bad register term in address");
-                return false;
-            }
-            if (sign < 0) {
-                u.error("a register cannot be subtracted");
-                return false;
-            }
-            if (size != 64) {
-                u.error("only 64-bit registers can address memory in this version");
-                return false;
-            }
-            if (scale == 1 && o.base < 0 && e - k == 1) {
-                o.base = num;
-            } else if (o.index < 0) {
-                if (num == 4) {
-                    u.error("RSP cannot be an index");
+                Value v;
+                std::string err;
+                if (!eval(u, t, k, e, v, err)) {
+                    u.error(err);
                     return false;
                 }
-                o.index = num;
-                o.scale = scale;
-            } else {
-                u.error("too many registers in address");
-                return false;
+                if (v.imagerel || v.offset || v.sub >= 0) {
+                    u.error("bad label term in address");
+                    return false;
+                }
+                bool addr = v.sym >= 0 || v.sec >= 0;
+                if (addr && (sign < 0 || acc.sym >= 0 || acc.sec >= 0)) {
+                    u.error("bad label term in address");
+                    return false;
+                }
+                if (addr) {
+                    acc.sym = v.sym;
+                    acc.sec = v.sec;
+                }
+                acc.v += sign * v.v;
             }
-        } else if (e - k == 1 && t[k].kind == T_NAME &&
-                   (u.find(t[k].text) < 0 || u.symbols[u.find(t[k].text)].bind != B_CONST)) {
-            if (o.sym >= 0 || sign < 0) {
-                u.error("bad label term in address");
-                return false;
-            }
-            o.sym = u.ref(t[k].text);
-        } else {
-            long long v;
-            std::string err;
-            if (!eval(u, t, k, e, v, err)) {
-                u.error(err);
-                return false;
-            }
-            o.value += sign * v;
+            k = e;
         }
-        k = e;
     }
-    if (o.sym >= 0 && (o.base >= 0 || o.index >= 0)) {
-        u.error("a label cannot be combined with registers in this version");
-        return false;
+    if (acc.sec >= 0) {
+        o.sym = u.location(acc.sec, acc.v);
+        acc.v = 0;
+    } else {
+        o.sym = acc.sym;
     }
+    o.label = o.sym >= 0 && o.base < 0 && o.index < 0;
+    o.value = acc.v;
     if (o.base < 0 && o.index >= 0 && o.scale == 1) {
         o.base = o.index;
         o.index = -1;

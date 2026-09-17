@@ -49,15 +49,18 @@ Directives: `.CODE`, `.DATA`, `name SEGMENT [READONLY] [ALIGN(n)] ['CODE'|'DATA'
 nest inside `.CODE`/`.DATA`; `_TEXT`, `_DATA`, `CONST` and `_BSS` name the sections the dotted directives
 open; the object carries ml64's characteristics: code `60000020`, data `C0000040`, READONLY `40000040`,
 uninitialised `C0000080`, plus the alignment field), `END`, `PUBLIC`, `EXTERN`/`EXTRN` (`name:PROC`, `name:QWORD`),
-`name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
-and labels as `DD`/`DQ` values.
+`name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n`, `ORG $+n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
+labels as `DD`/`DQ` values (`DQ v+8` keeps the addend in place, as COFF does), `DD IMAGEREL label`
+(ADDR32NB), and label differences `DB L2-L1` (folded when both are known, written at the end otherwise).
 
 Instructions: `MOV MOVZX MOVSX MOVSXD ADD OR ADC SBB AND SUB XOR CMP TEST LEA IMUL MUL DIV IDIV NEG NOT INC DEC
 SHL SAL SHR SAR PUSH POP CALL JMP Jcc RET NOP CQO CDQ CDQE LEAVE INT3`.
 
 Operands: 64/32/16/8-bit registers (`ah`-`bh` never with a REX prefix, as ml64 rules), constants,
-`BYTE`/`WORD`/`DWORD`/`QWORD PTR`, `[base + index*scale + disp]`,
-and labels (RIP-relative), bare or in brackets.
+`BYTE`/`WORD`/`DWORD`/`QWORD PTR`, `[base + index*scale + disp]` also spelled `disp[base]` or `[base][index]`,
+labels (RIP-relative) bare or in brackets, `label[reg*scale]` and `[reg+label]` (an absolute ADDR32
+displacement, as ml64 makes them), `OFFSET label` into a 64-bit register, and character constants
+(`'ab'` is 6162h). Expressions take `+ - * /`, parentheses, unary `+`/`-`, `$` and labels.
 
 Notes:
 - Symbols are case-sensitive; keywords are not.

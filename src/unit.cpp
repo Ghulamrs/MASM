@@ -69,6 +69,19 @@ int Unit::ref(const std::string &name)
     return (int)symbols.size() - 1;
 }
 
+/* an anonymous defined label for $ used as an address */
+int Unit::location(int sec, long long off)
+{
+    char buf[32];
+    snprintf(buf, sizeof buf, "\001%u", (unsigned)symbols.size());
+    int i = ref(buf);
+    Symbol &s = symbols[i];
+    s.defined = true;
+    s.section = sec;
+    s.value = off;
+    return i;
+}
+
 bool Unit::define(const std::string &name)
 {
     if (!cur())
@@ -131,9 +144,19 @@ void Unit::fixup(unsigned long at, int sym, RelKind kind)
     f.section = current;
     f.at = at;
     f.symbol = sym;
+    f.sub = -1;
+    f.width = 4;
     f.kind = kind;
     f.line = line;
     fixups.push_back(f);
+}
+
+/* a label difference to be written once both labels are known */
+void Unit::difference(unsigned long at, int sym, int sub, int width)
+{
+    fixup(at, sym, R_DIFF);
+    fixups.back().sub = sub;
+    fixups.back().width = width;
 }
 
 static long read32(const std::vector<unsigned char> &b, unsigned long at)
@@ -166,6 +189,21 @@ void Unit::resolve()
             continue;
         }
         Section &sec = sections[f.section];
+        if (f.kind == R_DIFF) {
+            const Symbol &t = symbols[f.sub];
+            if (t.bind == B_CONST) { error("'" + t.name + "' is a constant, not an address"); continue; }
+            if (!s.defined || !t.defined) continue;
+            if (s.section != t.section) { error("labels in different sections cannot be subtracted"); continue; }
+            long long d = s.value - t.value;
+            for (int i = 0; i < f.width; i++)
+                d += (long long)sec.bytes[f.at + i] << (8 * i);
+            long long lo = f.width == 8 ? 0 : -(1LL << (f.width * 8 - 1));
+            long long hi = f.width == 8 ? 0 : (1LL << (f.width * 8)) - 1;
+            if (f.width != 8 && (d < lo || d > hi)) { error("label difference does not fit"); continue; }
+            for (int i = 0; i < f.width; i++)
+                sec.bytes[f.at + i] = (unsigned char)((unsigned long long)d >> (8 * i));
+            continue;
+        }
         if (f.kind == R_REL32 && s.defined && s.section == f.section) {
             long a = read32(sec.bytes, f.at);
             write32(sec.bytes, f.at, (long)(s.value + a - (long long)(f.at + 4)));

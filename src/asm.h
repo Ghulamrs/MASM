@@ -10,9 +10,10 @@ struct Token {
     TokKind kind;
     std::string text;
     long long value;
+    bool wide;      /* a number of 2^32 or more: MOV r64 takes the 64-bit immediate for it, as ml64 */
 };
 
-enum RelKind { R_REL32, R_ADDR64, R_ADDR32 };
+enum RelKind { R_REL32, R_ADDR64, R_ADDR32, R_ADDR32NB, R_DIFF };
 
 struct Reloc {
     unsigned long offset;
@@ -46,8 +47,22 @@ struct Fixup {
     int section;
     unsigned long at;
     int symbol;
+    int sub;        /* R_DIFF: the label subtracted */
+    int width;      /* R_DIFF: bytes to write */
     RelKind kind;
     int line;
+};
+
+/* the value of an expression: a constant, or an address (a symbol plus a constant, a symbol
+   difference until both are defined, or $ as a section offset), with the ml64 modifiers */
+struct Value {
+    long long v;
+    int sym;        /* a label added, or -1 */
+    int sub;        /* a label subtracted, or -1 */
+    int sec;        /* the section of $, or -1 */
+    bool imagerel;  /* IMAGEREL label */
+    bool offset;    /* OFFSET label */
+    bool wide;      /* a literal of 2^32 or more took part */
 };
 
 class Unit {
@@ -68,6 +83,7 @@ public:
 
     int find(const std::string &name) const;
     int ref(const std::string &name);
+    int location(int sec, long long off);
     bool define(const std::string &name);
     bool constant(const std::string &name, long long v);
 
@@ -76,6 +92,7 @@ public:
     void emit32(unsigned long v);
     void emit64(unsigned long long v);
     void fixup(unsigned long at, int sym, RelKind kind);
+    void difference(unsigned long at, int sym, int sub, int width);
 
     void resolve();
 };
@@ -83,7 +100,9 @@ public:
 bool split_line(const std::string &src, std::vector<Token> &out, std::string &err);
 std::string upper(const std::string &s);
 bool is_punct(const std::vector<Token> &t, size_t i, char c);
-bool eval(const Unit &u, const std::vector<Token> &t, size_t from, size_t to, long long &v, std::string &err);
+bool eval(Unit &u, const std::vector<Token> &t, size_t from, size_t to, Value &v, std::string &err);
+bool eval_const(Unit &u, const std::vector<Token> &t, size_t from, size_t to, long long &v, std::string &err);
+bool located(const Unit &u, const Value &x, int &sec, long long &off);
 
 class Target {
 public:

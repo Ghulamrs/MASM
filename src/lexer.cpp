@@ -59,6 +59,7 @@ bool split_line(const std::string &src, std::vector<Token> &out, std::string &er
         if (isspace((unsigned char)c)) { i++; continue; }
         Token t;
         t.value = 0;
+        t.wide = false;
         if (name_char(c, true)) {
             size_t s = i++;
             while (i < n && name_char(src[i], false)) i++;
@@ -73,6 +74,7 @@ bool split_line(const std::string &src, std::vector<Token> &out, std::string &er
                 err = "bad number '" + t.text + "'";
                 return false;
             }
+            t.wide = (unsigned long long)t.value >= 0x100000000ULL;
         } else if (c == '\'' || c == '"') {
             size_t s = ++i;
             while (i < n && src[i] != c) i++;
