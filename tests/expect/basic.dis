@@ -1,0 +1,74 @@
+SYMBOL TABLE:
+[  0](sec  1)(fl 0x00)(ty    0)(scl   3) (nx 1) 0x0000000000000000 .data
+AUX scnlen 0x3a nreloc 2 nlnno 0
+[  2](sec  2)(fl 0x00)(ty    0)(scl   3) (nx 1) 0x0000000000000000 .text
+AUX scnlen 0xb2 nreloc 3 nlnno 0
+[  4](sec  0)(fl 0x00)(ty   20)(scl   2) (nx 0) 0x0000000000000000 printf
+[  5](sec  1)(fl 0x00)(ty    0)(scl   2) (nx 0) 0x000000000000000a counter
+[  6](sec  1)(fl 0x00)(ty    0)(scl   3) (nx 0) 0x0000000000000000 msg
+[  7](sec  1)(fl 0x00)(ty    0)(scl   3) (nx 0) 0x0000000000000012 table
+[  8](sec  1)(fl 0x00)(ty    0)(scl   3) (nx 0) 0x0000000000000022 buffer
+[  9](sec  1)(fl 0x00)(ty    0)(scl   3) (nx 0) 0x000000000000002a ptrs
+[ 10](sec  2)(fl 0x00)(ty   20)(scl   2) (nx 0) 0x0000000000000000 main
+[ 11](sec  2)(fl 0x00)(ty   20)(scl   2) (nx 0) 0x000000000000009e helper
+[ 12](sec  2)(fl 0x00)(ty    0)(scl   3) (nx 0) 0x000000000000009a done
+[ 13](sec  2)(fl 0x00)(ty    0)(scl   3) (nx 0) 0x00000000000000b1 helper_end
+
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	55                   	push   rbp
+   1:	48 8b ec             	mov    rbp,rsp
+   4:	48 83 ec 20          	sub    rsp,0x20
+   8:	41 54                	push   r12
+   a:	b8 05 00 00 00       	mov    eax,0x5
+   f:	48 c7 c1 e8 03 00 00 	mov    rcx,0x3e8
+  16:	49 b8 14 1a 99 be 1c 	movabs r8,0x1cbe991a14
+  1d:	00 00 00 
+  20:	48 c7 c0 ff ff ff ff 	mov    rax,0xffffffffffffffff
+  27:	48 03 c1             	add    rax,rcx
+  2a:	48 05 e8 03 00 00    	add    rax,0x3e8
+  30:	49 83 e9 07          	sub    r9,0x7
+  34:	41 81 fa 70 11 01 00 	cmp    r10d,0x11170
+  3b:	33 c0                	xor    eax,eax
+  3d:	49 23 de             	and    rbx,r14
+  40:	48 85 d1             	test   rcx,rdx
+  43:	48 8b 03             	mov    rax,QWORD PTR [rbx]
+  46:	48 8b 44 24 08       	mov    rax,QWORD PTR [rsp+0x8]
+  4b:	48 8b 55 f0          	mov    rdx,QWORD PTR [rbp-0x10]
+  4f:	4d 89 7c cc 18       	mov    QWORD PTR [r12+rcx*8+0x18],r15
+  54:	41 8b 45 00          	mov    eax,DWORD PTR [r13+0x0]
+  58:	48 8d 54 98 fd       	lea    rdx,[rax+rbx*4-0x3]
+  5d:	c7 43 04 63 00 00 00 	mov    DWORD PTR [rbx+0x4],0x63
+  64:	48 8d 0d 00 00 00 00 	lea    rcx,[rip+0x0]        # 6b <main+0x6b>
+			67: IMAGE_REL_AMD64_REL32	msg
+  6b:	48 8b 05 00 00 00 00 	mov    rax,QWORD PTR [rip+0x0]        # 72 <main+0x72>
+			6e: IMAGE_REL_AMD64_REL32	counter
+  72:	48 ff 45 f8          	inc    QWORD PTR [rbp-0x8]
+  76:	48 0f af c3          	imul   rax,rbx
+  7a:	48 99                	cqo
+  7c:	48 f7 f9             	idiv   rcx
+  7f:	49 f7 db             	neg    r11
+  82:	48 d1 e0             	shl    rax,1
+  85:	48 c1 fa 08          	sar    rdx,0x8
+  89:	e8 00 00 00 00       	call   8e <main+0x8e>
+			8a: IMAGE_REL_AMD64_REL32	printf
+  8e:	e8 0b 00 00 00       	call   9e <helper>
+  93:	ff d0                	call   rax
+  95:	e9 00 00 00 00       	jmp    9a <done>
+
+000000000000009a <done>:
+  9a:	41 5c                	pop    r12
+  9c:	c9                   	leave
+  9d:	c3                   	ret
+
+000000000000009e <helper>:
+  9e:	48 83 f9 00          	cmp    rcx,0x0
+  a2:	0f 84 09 00 00 00    	je     b1 <helper_end>
+  a8:	48 ff c9             	dec    rcx
+  ab:	0f 85 ed ff ff ff    	jne    9e <helper>
+
+00000000000000b1 <helper_end>:
+  b1:	c3                   	ret

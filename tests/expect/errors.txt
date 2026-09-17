@@ -1,0 +1,9 @@
+tests/errors.asm: line 3: operand sizes differ
+tests/errors.asm: line 4: PUSH needs a 64-bit register
+tests/errors.asm: line 5: size unknown; use QWORD PTR or DWORD PTR
+tests/errors.asm: line 6: only 64-bit registers can address memory in this version
+tests/errors.asm: line 7: LEA needs a register and a memory operand
+tests/errors.asm: line 8: unknown instruction 'FROB'
+tests/errors.asm: line 10: size unknown; use QWORD PTR or DWORD PTR
+tests/errors.asm: line 9: 'nowhere' is not defined
+tests/errors.asm: line 10: 'counter' is not defined
