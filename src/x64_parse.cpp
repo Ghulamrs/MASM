@@ -26,6 +26,10 @@ static const RegName reg_names[] = {
     {"SPL", 4, 8, 1}, {"BPL", 5, 8, 1}, {"SIL", 6, 8, 1}, {"DIL", 7, 8, 1},
     {"R8B", 8, 8, 0}, {"R9B", 9, 8, 0}, {"R10B", 10, 8, 0}, {"R11B", 11, 8, 0},
     {"R12B", 12, 8, 0}, {"R13B", 13, 8, 0}, {"R14B", 14, 8, 0}, {"R15B", 15, 8, 0},
+    {"XMM0", 0, 128, 0}, {"XMM1", 1, 128, 0}, {"XMM2", 2, 128, 0}, {"XMM3", 3, 128, 0},
+    {"XMM4", 4, 128, 0}, {"XMM5", 5, 128, 0}, {"XMM6", 6, 128, 0}, {"XMM7", 7, 128, 0},
+    {"XMM8", 8, 128, 0}, {"XMM9", 9, 128, 0}, {"XMM10", 10, 128, 0}, {"XMM11", 11, 128, 0},
+    {"XMM12", 12, 128, 0}, {"XMM13", 13, 128, 0}, {"XMM14", 14, 128, 0}, {"XMM15", 15, 128, 0},
 };
 
 static const RegName *find_reg(const Token &k)
@@ -50,6 +54,7 @@ static int ptr_size(const std::vector<Token> &t, size_t i)
     if (is_word(t, i, "WORD")) return 16;
     if (is_word(t, i, "DWORD")) return 32;
     if (is_word(t, i, "QWORD")) return 64;
+    if (is_word(t, i, "XMMWORD")) return 128;
     return 0;
 }
 

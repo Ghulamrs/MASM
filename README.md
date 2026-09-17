@@ -60,9 +60,13 @@ labels as `DD`/`DQ` values (`DQ v+8` keeps the addend in place, as COFF does), `
 (ADDR32NB), and label differences `DB L2-L1` (folded when both are known, written at the end otherwise).
 
 Instructions: `MOV MOVZX MOVSX MOVSXD ADD OR ADC SBB AND SUB XOR CMP TEST LEA IMUL MUL DIV IDIV NEG NOT INC DEC
-SHL SAL SHR SAR PUSH POP CALL JMP Jcc SETcc CMOVcc RET NOP CQO CDQ CDQE LEAVE INT3`.
+SHL SAL SHR SAR PUSH POP CALL JMP Jcc SETcc CMOVcc RET NOP CQO CDQ CDQE LEAVE INT3`; SSE scalar and
+128-bit: `MOVSD MOVSS ADDSD SUBSD MULSD DIVSD SQRTSD MINSD MAXSD` (and the `SS` forms), `UCOMISD COMISD
+UCOMISS COMISS CVTSS2SD CVTSD2SS CVTSI2SD CVTSI2SS CVTTSD2SI CVTSD2SI CVTTSS2SI CVTSS2SI PXOR XORPD XORPS
+ANDPD ANDPS ANDNPD ANDNPS ORPD ORPS PADDQ PSUBQ PAND POR PANDN MOVAPD MOVAPS MOVUPD MOVUPS MOVDQA MOVDQU
+MOVQ MOVD` with `xmm0`-`xmm15` and `XMMWORD PTR`.
 
-Operands: 64/32/16/8-bit registers (`ah`-`bh` never with a REX prefix, as ml64 rules), constants,
+Operands: 64/32/16/8-bit and XMM registers (`ah`-`bh` never with a REX prefix, as ml64 rules), constants,
 `BYTE`/`WORD`/`DWORD`/`QWORD PTR`, `[base + index*scale + disp]` also spelled `disp[base]` or `[base][index]`,
 labels (RIP-relative) bare or in brackets, `label[reg*scale]` and `[reg+label]` (an absolute ADDR32
 displacement, as ml64 makes them), `OFFSET label` into a 64-bit register, and character constants
@@ -89,5 +93,5 @@ form (`8B`, `03`, ...). Stage 2 begins with this ml64 comparison.
 ## Next
 
 1. Study the Compiler-C / Compiler-S / C++ / Compiler++ generators and their `.asm` output; extend the subset to match.
-2. Short jumps, SSE (floats).
+2. Short jumps.
 3. C6000 target and TI ELF writer.

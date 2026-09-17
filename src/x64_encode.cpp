@@ -194,6 +194,49 @@ static const Name jcc_names[] = {
     {"JLE", 14}, {"JNG", 14}, {"JG", 15}, {"JNLE", 15},
 };
 
+/* the SSE ops the compilers emit: a mandatory prefix before any REX, one opcode after 0F, the
+   form, and the memory width ml64 insists on (16: any, the 128-bit ops take unsized memory) */
+enum SseForm { S_LOAD, S_STORE, S_FROM_INT, S_TO_INT };
+
+struct SseOp {
+    const char *name;
+    unsigned char prefix;
+    unsigned char op;
+    int form;
+    int msize;
+};
+
+static const SseOp sse_ops[] = {
+    {"MOVSD", 0xF2, 0x10, S_LOAD, 8}, {"MOVSD", 0xF2, 0x11, S_STORE, 8},
+    {"MOVSS", 0xF3, 0x10, S_LOAD, 4}, {"MOVSS", 0xF3, 0x11, S_STORE, 4},
+    {"ADDSD", 0xF2, 0x58, S_LOAD, 8}, {"SUBSD", 0xF2, 0x5C, S_LOAD, 8}, {"MULSD", 0xF2, 0x59, S_LOAD, 8},
+    {"DIVSD", 0xF2, 0x5E, S_LOAD, 8}, {"SQRTSD", 0xF2, 0x51, S_LOAD, 8}, {"MINSD", 0xF2, 0x5D, S_LOAD, 8},
+    {"MAXSD", 0xF2, 0x5F, S_LOAD, 8},
+    {"ADDSS", 0xF3, 0x58, S_LOAD, 4}, {"SUBSS", 0xF3, 0x5C, S_LOAD, 4}, {"MULSS", 0xF3, 0x59, S_LOAD, 4},
+    {"DIVSS", 0xF3, 0x5E, S_LOAD, 4}, {"SQRTSS", 0xF3, 0x51, S_LOAD, 4}, {"MINSS", 0xF3, 0x5D, S_LOAD, 4},
+    {"MAXSS", 0xF3, 0x5F, S_LOAD, 4},
+    {"UCOMISD", 0x66, 0x2E, S_LOAD, 8}, {"COMISD", 0x66, 0x2F, S_LOAD, 8},
+    {"UCOMISS", 0x00, 0x2E, S_LOAD, 4}, {"COMISS", 0x00, 0x2F, S_LOAD, 4},
+    {"CVTSS2SD", 0xF3, 0x5A, S_LOAD, 4}, {"CVTSD2SS", 0xF2, 0x5A, S_LOAD, 8},
+    {"CVTSI2SD", 0xF2, 0x2A, S_FROM_INT, 0}, {"CVTSI2SS", 0xF3, 0x2A, S_FROM_INT, 0},
+    {"CVTTSD2SI", 0xF2, 0x2C, S_TO_INT, 8}, {"CVTSD2SI", 0xF2, 0x2D, S_TO_INT, 8},
+    {"CVTTSS2SI", 0xF3, 0x2C, S_TO_INT, 4}, {"CVTSS2SI", 0xF3, 0x2D, S_TO_INT, 4},
+    {"PXOR", 0x66, 0xEF, S_LOAD, 16}, {"XORPD", 0x66, 0x57, S_LOAD, 16}, {"XORPS", 0x00, 0x57, S_LOAD, 16},
+    {"ANDPD", 0x66, 0x54, S_LOAD, 16}, {"ANDPS", 0x00, 0x54, S_LOAD, 16},
+    {"ANDNPD", 0x66, 0x55, S_LOAD, 16}, {"ANDNPS", 0x00, 0x55, S_LOAD, 16},
+    {"ORPD", 0x66, 0x56, S_LOAD, 16}, {"ORPS", 0x00, 0x56, S_LOAD, 16},
+    {"PADDQ", 0x66, 0xD4, S_LOAD, 16}, {"PSUBQ", 0x66, 0xFB, S_LOAD, 16},
+    {"PAND", 0x66, 0xDB, S_LOAD, 16}, {"POR", 0x66, 0xEB, S_LOAD, 16}, {"PANDN", 0x66, 0xDF, S_LOAD, 16},
+    {"MOVAPD", 0x66, 0x28, S_LOAD, 16}, {"MOVAPD", 0x66, 0x29, S_STORE, 16},
+    {"MOVAPS", 0x00, 0x28, S_LOAD, 16}, {"MOVAPS", 0x00, 0x29, S_STORE, 16},
+    {"MOVUPD", 0x66, 0x10, S_LOAD, 16}, {"MOVUPD", 0x66, 0x11, S_STORE, 16},
+    {"MOVUPS", 0x00, 0x10, S_LOAD, 16}, {"MOVUPS", 0x00, 0x11, S_STORE, 16},
+    {"MOVDQA", 0x66, 0x6F, S_LOAD, 16}, {"MOVDQA", 0x66, 0x7F, S_STORE, 16},
+    {"MOVDQU", 0xF3, 0x6F, S_LOAD, 16}, {"MOVDQU", 0xF3, 0x7F, S_STORE, 16},
+    {"MOVQ", 0xF3, 0x7E, S_LOAD, 8}, {"MOVQ", 0x66, 0xD6, S_STORE, 8},
+    {"MOVD", 0x66, 0x6E, S_LOAD, 4}, {"MOVD", 0x66, 0x7E, S_STORE, 4},
+};
+
 static int lookup(const Name *list, int n, const std::string &name)
 {
     for (int i = 0; i < n; i++)
@@ -258,6 +301,82 @@ static long long narrow(int size, long long v)
     if (size == 8) return (long long)(signed char)(v & 0xFF);
     if (size == 16) return (long long)(short)(v & 0xFFFF);
     return (long long)(int)(unsigned int)(v & 0xFFFFFFFFLL);
+}
+
+static bool is_xmm(const Operand &o)
+{
+    return o.kind == O_REG && o.size == 128;
+}
+
+/* the memory operand's width must be what the op reads or writes; 128-bit ops take it unsized */
+static bool sse_size(Unit &u, const Operand &m, int msize)
+{
+    if (m.kind != O_MEM) return true;
+    if (msize == 16 ? (m.size == 0 || m.size == 128) : m.size == msize * 8) return true;
+    if (m.size == 0) u.error("size unknown; use QWORD PTR or DWORD PTR");
+    else u.error("wrong memory operand size for this instruction");
+    return false;
+}
+
+static bool sse(Unit &u, const std::string &name, std::vector<Operand> &ops, Code &c)
+{
+    const size_t count = sizeof sse_ops / sizeof sse_ops[0];
+    size_t first = count;
+    for (size_t i = 0; i < count; i++)
+        if (name == sse_ops[i].name) { first = i; break; }
+    if (first == count)
+        return false;
+    if (ops.size() != 2 || ops[0].kind == O_IMM || ops[1].kind == O_IMM) {
+        u.error(name + " needs two operands");
+        return true;
+    }
+    Operand &d = ops[0];
+    Operand &s = ops[1];
+    if (d.kind == O_MEM && s.kind == O_MEM) { u.error("two memory operands"); return true; }
+    const SseOp *op = 0;
+    for (size_t i = first; i < count && name == sse_ops[i].name; i++) {
+        int f = sse_ops[i].form;
+        if (f == S_LOAD && is_xmm(d) && !(name != "MOVQ" && name != "MOVD" && s.kind == O_REG && !is_xmm(s))) op = &sse_ops[i];
+        else if (f == S_STORE && is_xmm(s) && !is_xmm(d)) op = &sse_ops[i];
+        else if (f == S_FROM_INT && is_xmm(d) && !is_xmm(s)) op = &sse_ops[i];
+        else if (f == S_TO_INT && d.kind == O_REG && !is_xmm(d) && (is_xmm(s) || s.kind == O_MEM)) op = &sse_ops[i];
+        if (op) break;
+    }
+    if (!op) { u.error(name + ": bad operand combination"); return true; }
+    bool w = false;
+    unsigned prefix = op->prefix;
+    unsigned opcode = op->op;
+    if (op->form == S_FROM_INT) {
+        if (s.kind == O_REG ? (s.size != 32 && s.size != 64) : (s.size != 32 && s.size != 64)) {
+            u.error(name + " needs a 32- or 64-bit integer operand");
+            return true;
+        }
+        w = s.size == 64;
+    } else if (op->form == S_TO_INT) {
+        if (d.size != 32 && d.size != 64) { u.error(name + " needs a 32- or 64-bit register"); return true; }
+        if (!sse_size(u, s, op->msize)) return true;
+        w = d.size == 64;
+    } else if ((name == "MOVQ" || name == "MOVD") && (d.kind == O_REG && s.kind == O_REG) && (!is_xmm(d) || !is_xmm(s))) {
+        /* MOVQ/MOVD with a general register: 66 [REX.W] 0F 6E (into the xmm) or 7E (out of it) */
+        const Operand &g = is_xmm(d) ? s : d;
+        if (g.size != (name == "MOVQ" ? 64 : 32)) { u.error(name + " needs a " + (name == "MOVQ" ? "64" : "32") + "-bit register"); return true; }
+        prefix = 0x66;
+        opcode = is_xmm(d) ? 0x6E : 0x7E;
+        w = name == "MOVQ";
+    } else {
+        const Operand &m = op->form == S_LOAD ? s : d;
+        if (m.kind == O_REG && !is_xmm(m)) { u.error(name + " needs XMM registers"); return true; }
+        if (!sse_size(u, m, op->msize)) return true;
+    }
+    if (prefix) put(c, prefix);
+    if (op->form == S_LOAD || op->form == S_FROM_INT || (op->form == S_TO_INT)) {
+        if (op->form == S_TO_INT) rm2(c, w, d.reg, s, 0x0F, opcode);
+        else rm2(c, w, d.reg, s, 0x0F, opcode);
+    } else {
+        rm2(c, w, s.reg, d, 0x0F, opcode);
+    }
+    emit(u, c);
+    return true;
 }
 
 void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operand> &ops)
@@ -499,6 +618,9 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         emit(u, c);
         return;
     }
+
+    if (sse(u, name, ops, c))
+        return;
 
     u.error("unknown instruction '" + name + "'");
 }
