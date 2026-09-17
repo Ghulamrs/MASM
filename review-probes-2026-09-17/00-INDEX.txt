@@ -1,0 +1,10 @@
+Defect probes for REVIEW-2026-09-17.md, named by the review's ids.
+Each file's header says what ml64 14.44 (VS 2022 17.14, Windows box) gives and what this
+assembler at ffa04ad gives. Assemble one with:  asm -t x64 <file>  and, on the Windows box,
+ml64 /nologo /c /Fo x.obj <file> && dumpbin /disasm /relocations x.obj.
+A-ids: encoding vs ml64.  B-ids: COFF.  D-ids: code review.  R-ids: forms ml64 accepts and
+this assembler refuses (with the count of corpus lines/files that use them).
+Command-line probes that need no file (see D8/D14 in the report):
+  asm -t x64 same.asm same.asm      two jobs write the same .obj, no diagnostic
+  asm -t x64 <dir> -o d.obj         'line 0: END expected'
+  asm -t x64 f.asm -o /nonexistent/x.obj   'cannot create ...', rc 1
