@@ -247,6 +247,7 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     }
     if (w == "PUBLIC" || w == "EXTERN" || w == "EXTRN") {
         size_t k = 1;
+        if (t.size() < 2) { u.error(w + " needs a name"); return true; }
         while (k < t.size()) {
             if (t[k].kind != T_NAME) {
                 u.error("name expected");

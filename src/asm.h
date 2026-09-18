@@ -144,6 +144,7 @@ public:
     ~Assembler();
     bool run();
     const std::vector<std::string> &errors() const;
+    void fail(const std::string &why) { unit.errors.push_back(why); }
 
 private:
     std::string input;
