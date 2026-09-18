@@ -94,15 +94,31 @@ Notes:
   the second pass, and a jump only ever widens, so the passes end. A `CALL`/`JMP`/`Jcc` to its own section
   is settled in the object; any other RIP-relative reference is a relocation, as ml64 leaves it.
 
-## Checking against ml64 on Windows
+## Tests
 
 ```
-ml64 /c /Fo ref.obj tests\basic.asm
-asm -t x64 tests\basic.asm -o mine.obj
-dumpbin /disasm /relocations ref.obj > ref.txt
-dumpbin /disasm /relocations mine.obj > mine.txt
-fc ref.txt mine.txt
+sh tests/run.sh                      # any machine with python3; ASM=... names the binary
+sh tests/windows.sh [corpus dir]     # the Windows box: cl build, both builds' objects, links, a corpus
 ```
+
+`tests/run.sh` needs nothing but python3. Its first leg, `tests/enc.sh`, assembles the twenty
+encoding files in `tests/enc/` - 30,923 instructions covering every register in every position,
+every immediate and displacement boundary, every memory form, the jumps, the SSE set, the bit and
+string ops - and compares the code bytes with `tests/enc/*.ml.b`, the bytes per instruction ml64
+14.44 produced for the same files (dumpbin's listing, normalised); no disassembler is involved.
+Then the messages (`tests/errors.asm`, `tests/refuse/*.asm` each with its `.expect`), a 20,000-deep
+expression, eight jobs at once with per-file determinism, and two jobs naming one object refused.
+
+`tests/windows.sh` ships `src/` and `tests/` to the box (`ssh windows`, `C:\masm-tests`), builds with
+`cl /W4 /permissive-` (`tests/windows/build.cmd`), assembles the encoding files there and compares
+those objects byte for byte with the Mac's, and links and runs `tests/link/` - b01 alone, b02 with
+its two halves assembled by this assembler and by ml64 in both mixes (`link.cmd`). Given a directory
+of `.asm` files it assembles every one with ml64 and with this assembler on the box (`corpus.cmd`),
+lists both objects with dumpbin, and `tests/corpus-diff.py` compares the three streams `tests/norm.py`
+makes of a listing - the bytes of each instruction, the relocations, the symbols - by section name,
+ml64's `@comp.id`/`@feat.00`/`.debug$S` left out. The corpus that matters is the compilers' own:
+`cxx1 -arch x86_64-windows -masm=masm -S` over its cases and cc1's Windows emissions, 681 files,
+and it comes out identical on all three streams.
 
 Encodings are ml64's byte for byte, where ml64 has a choice: `test a, b` puts the first operand in
 the reg field (`48 85 C1`), `mov r64, imm` takes the 64-bit form when the literal was spelled as one
