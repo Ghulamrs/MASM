@@ -48,6 +48,7 @@ private:
     bool done;
     int pass;
     int proc;
+    int anon;                           /* the @@ labels defined so far this pass */
     std::vector<unsigned char> jsize;   /* each jump in source order: 0 short, 1 near; only ever grows */
     size_t jn;                          /* the jumps seen this pass */
     bool grew;                          /* a jump was widened this pass */

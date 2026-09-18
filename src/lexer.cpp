@@ -1,5 +1,6 @@
 #include "asm.h"
 #include <cctype>
+#include <cstdlib>
 
 std::string upper(const std::string &s)
 {
@@ -23,7 +24,8 @@ static bool name_char(char c, bool first)
     return isdigit((unsigned char)c) != 0;
 }
 
-/* a number: decimal, nnH, nnB; false when malformed or past 2^64 (ml64's A2071) */
+/* a number: decimal, nnH, and MASM's other radix letters - B and Y binary, O and Q octal,
+   T and D decimal; false when malformed or past 2^64 (ml64's A2071) */
 static bool number(const std::string &s, long long &v, bool &large)
 {
     int base = 10;
@@ -31,7 +33,9 @@ static bool number(const std::string &s, long long &v, bool &large)
     std::string d = s;
     char last = (char)toupper((unsigned char)d[d.size() - 1]);
     if (last == 'H') { base = 16; d.erase(d.size() - 1); }
-    else if (last == 'B' && d.size() > 1) { base = 2; d.erase(d.size() - 1); }
+    else if ((last == 'B' || last == 'Y') && d.size() > 1) { base = 2; d.erase(d.size() - 1); }
+    else if ((last == 'O' || last == 'Q') && d.size() > 1) { base = 8; d.erase(d.size() - 1); }
+    else if ((last == 'T' || last == 'D') && d.size() > 1) { base = 10; d.erase(d.size() - 1); }
     if (d.empty())
         return false;
     unsigned long long r = 0;
@@ -65,6 +69,7 @@ bool split_line(const std::string &src, std::vector<Token> &out, std::string &er
         if (isspace((unsigned char)c)) { i++; continue; }
         Token t;
         t.value = 0;
+        t.real = 0;
         t.wide = false;
         if (name_char(c, true)) {
             size_t s = i++;
@@ -74,6 +79,22 @@ bool split_line(const std::string &src, std::vector<Token> &out, std::string &er
         } else if (isdigit((unsigned char)c)) {
             size_t s = i++;
             while (i < n && isalnum((unsigned char)src[i])) i++;
+            /* a real: digits, a point, digits, and an exponent if any - the bits of it are
+               what DD, DQ, REAL4 and REAL8 store */
+            if (i < n && src[i] == '.' && i + 1 < n && isdigit((unsigned char)src[i + 1])) {
+                i++;
+                while (i < n && isdigit((unsigned char)src[i])) i++;
+                if (i < n && (src[i] == 'e' || src[i] == 'E')) {
+                    size_t e = i + 1;
+                    if (e < n && (src[e] == '+' || src[e] == '-')) e++;
+                    if (e < n && isdigit((unsigned char)src[e])) { i = e; while (i < n && isdigit((unsigned char)src[i])) i++; }
+                }
+                t.kind = T_REAL;
+                t.text = src.substr(s, i - s);
+                t.real = strtod(t.text.c_str(), 0);
+                out.push_back(t);
+                continue;
+            }
             t.kind = T_NUM;
             t.text = src.substr(s, i - s);
             bool large;
@@ -83,15 +104,19 @@ bool split_line(const std::string &src, std::vector<Token> &out, std::string &er
             }
             t.wide = (unsigned long long)t.value >= 0x100000000ULL;
         } else if (c == '\'' || c == '"') {
-            size_t s = ++i;
-            while (i < n && src[i] != c) i++;
-            if (i >= n) {
-                err = "unterminated string";
-                return false;
-            }
-            t.kind = T_STR;
-            t.text = src.substr(s, i - s);
+            /* a doubled quote inside the string is one quote: 'it''s', "say ""hi""" */
             i++;
+            t.kind = T_STR;
+            for (;;) {
+                while (i < n && src[i] != c) t.text += src[i++];
+                if (i >= n) {
+                    err = "unterminated string";
+                    return false;
+                }
+                i++;
+                if (i < n && src[i] == c) { t.text += c; i++; continue; }
+                break;
+            }
         } else if (c == ',' || c == ':' || c == '[' || c == ']' || c == '(' || c == ')' ||
                    c == '+' || c == '-' || c == '*' || c == '/' || c == '<' || c == '>') {
             t.kind = T_PUNCT;

@@ -55,12 +55,16 @@ uninitialised `C0000080`, plus the alignment field), `END`, `PUBLIC`, `EXTERN`/`
 and the like (ignored), `name PROC [PUBLIC|PRIVATE] [FRAME]` with `.PUSHREG`, `.ALLOCSTACK`, `.SETFRAME`,
 `.SAVEREG`, `.SAVEXMM128`, `.PUSHFRAME` and `.ENDPROLOG` (the UNWIND_INFO goes to `.xdata` and the
 RUNTIME_FUNCTION to `.pdata`, relocated against the PROC and one Static `$xdatasym` exactly as ml64 writes them),
-`name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n` (a power of two up to the section's alignment, as ml64's A2189 requires), `ORG $+n`, `DB DW DD DQ` with strings, `?`, `n DUP (x)`,
+`name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n` (a power of two up to the section's alignment, as ml64's A2189 requires), `ORG $+n`, `DB DW DD DQ REAL4 REAL8` with strings (a doubled quote is one quote, `DW 'ab'` the constant 6162h), reals (`DQ 1.5`, `DD -2.5`, stored as their float or double bits), `?`, `n DUP (x)`,
+`COMM name:type[:count]` (an external the linker allocates, its size in the symbol's value) and `EXTERNDEF name:type` (public if the file defines it, extern if it only uses it),
 labels as `DD`/`DQ` values (`DQ v+8` keeps the addend in place, as COFF does), `DD IMAGEREL label`
 (ADDR32NB), and label differences `DB L2-L1` (folded when both are known, written at the end otherwise).
 
-Instructions: `MOV MOVZX MOVSX MOVSXD ADD OR ADC SBB AND SUB XOR CMP TEST LEA IMUL MUL DIV IDIV NEG NOT INC DEC
-SHL SAL SHR SAR ROL ROR RCL RCR` (by a constant or by `CL`) `PUSH POP CALL JMP Jcc SETcc CMOVcc RET NOP CQO CDQ CDQE LEAVE INT3`; SSE scalar and
+Instructions: `MOV MOVZX MOVSX MOVSXD ADD OR ADC SBB AND SUB XOR CMP TEST LEA IMUL` (one, two or three operands) `MUL DIV IDIV NEG NOT INC DEC
+SHL SAL SHR SAR ROL ROR RCL RCR` (by a constant or by `CL`) `PUSH POP CALL JMP Jcc SETcc CMOVcc RET NOP CQO CDQ CDQE CWDE CWD CBW LEAVE INT`,
+`XCHG CMPXCHG XADD BT BTS BTR BTC BSF BSR POPCNT LZCNT TZCNT`, `LOCK` and `REP`/`REPE`/`REPNE` prefixes, the string ops
+`MOVSB..MOVSQ STOSB..STOSQ LODSB..LODSQ SCASB..SCASQ CMPSB..CMPSQ`, `CLD STD CLC STC CMC HLT PAUSE UD2 SYSCALL CPUID RDTSC
+PUSHFQ POPFQ LFENCE MFENCE SFENCE`; SSE scalar and
 128-bit: `MOVSD MOVSS ADDSD SUBSD MULSD DIVSD SQRTSD MINSD MAXSD` (and the `SS` forms), `UCOMISD COMISD
 UCOMISS COMISS CVTSS2SD CVTSD2SS CVTSI2SD CVTSI2SS CVTTSD2SI CVTSD2SI CVTTSS2SI CVTSS2SI PXOR XORPD XORPS
 ANDPD ANDPS ANDNPD ANDNPS ORPD ORPS PADDQ PSUBQ PAND POR PANDN MOVAPD MOVAPS MOVUPD MOVUPS MOVDQA MOVDQU
@@ -73,10 +77,15 @@ it) bare or in brackets - a bare data label carries its declared width (`mov v, 
 with `v DD 0` is a dword store) and `EXTERN name:QWORD` its type, so `call`/`jmp` through such a label is
 `FF /2`/`FF /4` and `mov r64, [code_label]` is the label's address, as ml64 reads them - `label[reg*scale]` and `[reg+label]` (an absolute ADDR32
 displacement, as ml64 makes them), `OFFSET label` into a 64-bit register, and character constants
-(`'ab'` is 6162h). Expressions take `+ - * /`, parentheses, unary `+`/`-`, `$` and labels.
+(`'ab'` is 6162h). Expressions take `+ - * / MOD SHL SHR AND OR XOR NOT EQ NE LT LE GT GE LOW HIGH` at MASM's
+levels (a true comparison is -1), parentheses, unary `+`/`-`, `$` and labels; numbers are decimal or
+carry MASM's radix letter - `H`, `B`/`Y`, `O`/`Q`, `T`/`D`.
 
 Notes:
-- Symbols are case-sensitive; keywords are not.
+- Symbols are case-sensitive (ml64 with `OPTION CASEMAP:NONE`); keywords are not.
+- Labels are file-scoped, as under `OPTION NOSCOPED`: `name::` is taken and means the same as `name:`, and
+  `@@:` is an anonymous label that `@B` (the nearest back) and `@F` (the next forward) reach across PROCs,
+  where ml64 stops at the PROC's end.
 - Expressions are evaluated with explicit stacks, so nesting is limited by memory, not the thread's stack;
   a number of 2^64 or more is refused (ml64's A2071).
 - `PROC` names are public, as in MASM, unless `OPTION PROC:PRIVATE` or `name PROC PRIVATE` says otherwise.

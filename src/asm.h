@@ -4,13 +4,14 @@
 #include <string>
 #include <vector>
 
-enum TokKind { T_NAME, T_NUM, T_STR, T_PUNCT };
+enum TokKind { T_NAME, T_NUM, T_STR, T_PUNCT, T_REAL };
 
 struct Token {
     TokKind kind;
     std::string text;
     long long value;
     bool wide;      /* a number of 2^32 or more: MOV r64 takes the 64-bit immediate for it, as ml64 */
+    double real;    /* T_REAL: the value, stored as float or double bits by the data directives */
 };
 
 /* REL32_n: a RIP-relative displacement followed by n bytes of immediate (COFF types 5..9) */
@@ -49,6 +50,8 @@ struct Symbol {
     int pass;       /* the pass that defined it (a second definition in one pass is an error) */
     int prev_section;   /* where the previous pass put it: the layout has settled when nothing moved */
     long long prev_value;
+    bool common;        /* COMM: an extern the linker allocates, its size in value */
+    bool externdef;     /* EXTERNDEF: public if defined here, extern if only referenced */
 };
 
 struct Fixup {

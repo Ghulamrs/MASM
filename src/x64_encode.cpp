@@ -258,7 +258,24 @@ static int lookup(const Name *list, int n, const std::string &name)
 
 static const Name plain_names[] = {
     {"RET", 0xC3}, {"NOP", 0x90}, {"CDQ", 0x99}, {"LEAVE", 0xC9}, {"INT3", 0xCC},
+    {"CWDE", 0x98}, {"HLT", 0xF4}, {"CMC", 0xF5}, {"CLC", 0xF8}, {"STC", 0xF9},
+    {"CLD", 0xFC}, {"STD", 0xFD}, {"PUSHFQ", 0x9C}, {"POPFQ", 0x9D},
+    {"MOVSB", 0xA4}, {"MOVSD", 0xA5}, {"CMPSB", 0xA6}, {"CMPSD", 0xA7},
+    {"STOSB", 0xAA}, {"STOSD", 0xAB}, {"LODSB", 0xAC}, {"LODSD", 0xAD}, {"SCASB", 0xAE}, {"SCASD", 0xAF},
 };
+/* two-byte plain forms: 66 or REX.W in front of a string op, or 0F xx */
+static const Name plain2_names[] = {
+    {"CWD", 0x6699}, {"CBW", 0x6698}, {"PAUSE", 0xF390}, {"UD2", 0x0F0B}, {"SYSCALL", 0x0F05},
+    {"CPUID", 0x0FA2}, {"RDTSC", 0x0F31},
+    {"MOVSW", 0x66A5}, {"MOVSQ", 0x48A5}, {"CMPSW", 0x66A7}, {"CMPSQ", 0x48A7},
+    {"STOSW", 0x66AB}, {"STOSQ", 0x48AB}, {"LODSW", 0x66AD}, {"LODSQ", 0x48AD}, {"SCASW", 0x66AF}, {"SCASQ", 0x48AF},
+};
+static const Name fence_names[] = { {"LFENCE", 0xE8}, {"MFENCE", 0xF0}, {"SFENCE", 0xF8} };
+/* 0F xx /r with the destination register in the reg field */
+static const Name bitscan_names[] = { {"BSF", 0xBC}, {"BSR", 0xBD} };
+static const Name cnt_names[] = { {"POPCNT", 0xB8}, {"LZCNT", 0xBD}, {"TZCNT", 0xBC} };
+/* 0F xx /r with the bit register in the reg field, or 0F BA /n ib with a constant */
+static const Name bt_names[] = { {"BT", 4}, {"BTS", 5}, {"BTR", 6}, {"BTC", 7} };
 
 static bool same_size(Unit &u, Operand &a, Operand &b)
 {
@@ -398,7 +415,30 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         note(c, ops[i]);
     int k;
 
-    k = lookup(plain_names, 5, name);
+    if (name == "INT") {
+        /* INT 3 is the one-byte trap, as ml64 writes it; INT3 is the spelling ml64 refuses */
+        if (n != 1 || ops[0].kind != O_IMM || ops[0].value < 0 || ops[0].value > 255) { u.error("INT needs a constant from 0 to 255"); return; }
+        if (ops[0].value == 3) { u.emit8(0xCC); return; }
+        u.emit8(0xCD);
+        u.emit8((unsigned)ops[0].value);
+        return;
+    }
+    /* MOVSD and CMPSD are string ops with no operands and SSE ops with two */
+    k = n == 0 ? lookup(plain2_names, 17, name) : -1;
+    if (k >= 0) {
+        if (n != 0) { u.error(name + " takes no operands"); return; }
+        u.emit8((unsigned)k >> 8);
+        u.emit8((unsigned)k & 0xFF);
+        return;
+    }
+    k = lookup(fence_names, 3, name);
+    if (k >= 0) {
+        if (n != 0) { u.error(name + " takes no operands"); return; }
+        u.emit8(0x0F); u.emit8(0xAE); u.emit8((unsigned)k);
+        return;
+    }
+    k = lookup(plain_names, 24, name);
+    if (k >= 0 && n != 0 && (name == "MOVSD" || name == "CMPSD")) k = -1;
     if (k >= 0 || name == "CQO" || name == "CDQE") {
         if (n == 1 && name == "RET" && ops[0].kind == O_IMM) {
             if (ops[0].value < 0 || ops[0].value > 0xFFFF) { u.error("RET value does not fit"); return; }
@@ -525,14 +565,99 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         return;
     }
 
-    if (name == "IMUL" && n == 2) {
-        if (ops[0].kind != O_REG || ops[1].kind == O_IMM || ops[0].size == 8) {
-            u.error("IMUL needs a register and a register or memory operand");
+    if (name == "IMUL" && (n == 2 || n == 3)) {
+        /* imul r, r/m (0F AF); imul r, imm is imul r, r, imm; imul r, r/m, imm is 6B ib or 69 iw/id */
+        if (ops[0].kind != O_REG || ops[0].size == 8 || (n == 3 && ops[2].kind != O_IMM) ||
+            (n == 2 && ops[1].kind == O_IMM && false)) {
+            u.error("IMUL needs a register, a register or memory operand, and at most a constant");
+            return;
+        }
+        if (n == 2 && ops[1].kind == O_IMM) { ops.push_back(ops[1]); ops[1] = ops[0]; n = 3; }
+        if (ops[1].kind == O_IMM) { u.error("IMUL needs a register or memory operand second"); return; }
+        if (!same_size(u, ops[0], ops[1])) return;
+        int size = ops[0].size;
+        if (n == 2) {
+            if (size == 16) put(c, 0x66);
+            rm2(c, size == 64, ops[0].reg, ops[1], 0x0F, 0xAF);
+            emit(u, c);
+            return;
+        }
+        long long v = ops[2].value;
+        if (!imm_fits(u, size, v)) return;
+        v = narrow(size, v);
+        if (size == 16) put(c, 0x66);
+        if (fits8(v)) {
+            rm1(c, size == 64, ops[0].reg, ops[1], 0x6B);
+            put(c, (unsigned)v & 0xFF);
+        } else {
+            rm1(c, size == 64, ops[0].reg, ops[1], 0x69);
+            put_imm(c, size, v);
+        }
+        emit(u, c);
+        return;
+    }
+
+    if (name == "XCHG") {
+        /* the register goes in the reg field, both registers the first; with the accumulator
+           and 16 bits or more, the one-byte 90+r form */
+        if (n != 2 || ops[0].kind == O_IMM || ops[1].kind == O_IMM || (ops[0].kind == O_MEM && ops[1].kind == O_MEM)) {
+            u.error("XCHG needs a register and a register or memory operand");
             return;
         }
         if (!same_size(u, ops[0], ops[1])) return;
+        int size = ops[0].size;
+        if (ops[0].kind == O_REG && ops[1].kind == O_REG && size != 8 &&
+            ((ops[0].reg == 0 && !ops[0].high) || (ops[1].reg == 0 && !ops[1].high))) {
+            const Operand &other = ops[0].reg == 0 && !ops[0].high ? ops[1] : ops[0];
+            if (size == 16) put(c, 0x66);
+            rex(c, (size == 64 ? 8 : 0) | ((other.reg & 8) ? 1 : 0));
+            put(c, 0x90 | (other.reg & 7));
+            emit(u, c);
+            return;
+        }
+        if (ops[0].kind == O_REG) rm(c, size, ops[0].reg, ops[1], 0x87);
+        else rm(c, size, ops[1].reg, ops[0], 0x87);
+        emit(u, c);
+        return;
+    }
+
+    if (name == "CMPXCHG" || name == "XADD") {
+        if (n != 2 || ops[1].kind != O_REG || ops[0].kind == O_IMM) { u.error(name + " needs a register or memory operand and a register"); return; }
+        if (!same_size(u, ops[0], ops[1])) return;
+        int size = ops[0].size;
+        if (size == 16) put(c, 0x66);
+        rm2(c, size == 64, ops[1].reg, ops[0], 0x0F, (name == "CMPXCHG" ? 0xB1 : 0xC1) - (size == 8 ? 1 : 0));
+        emit(u, c);
+        return;
+    }
+
+    k = lookup(bitscan_names, 2, name);
+    int cnt = lookup(cnt_names, 3, name);
+    if (k >= 0 || cnt >= 0) {
+        if (n != 2 || ops[0].kind != O_REG || ops[1].kind == O_IMM || ops[0].size == 8) { u.error(name + " needs a register and a register or memory operand"); return; }
+        if (!same_size(u, ops[0], ops[1])) return;
+        if (cnt >= 0) put(c, 0xF3);
         if (ops[0].size == 16) put(c, 0x66);
-        rm2(c, ops[0].size == 64, ops[0].reg, ops[1], 0x0F, 0xAF);
+        rm2(c, ops[0].size == 64, ops[0].reg, ops[1], 0x0F, (unsigned)(k >= 0 ? k : cnt));
+        emit(u, c);
+        return;
+    }
+
+    k = lookup(bt_names, 4, name);
+    if (k >= 0) {
+        if (n != 2 || ops[0].kind == O_IMM || ops[0].size == 8) { u.error(name + " needs a 16-, 32- or 64-bit operand and a register or constant"); return; }
+        if (ops[1].kind == O_IMM) {
+            if (!need_size(u, ops[0])) return;
+            if (ops[1].value < 0 || ops[1].value > 255) { u.error("bit number does not fit"); return; }
+            if (ops[0].size == 16) put(c, 0x66);
+            rm2(c, ops[0].size == 64, k, ops[0], 0x0F, 0xBA);
+            put(c, (unsigned)ops[1].value);
+        } else {
+            if (ops[1].kind != O_REG) { u.error(name + " needs a register or constant bit number"); return; }
+            if (!same_size(u, ops[0], ops[1])) return;
+            if (ops[0].size == 16) put(c, 0x66);
+            rm2(c, ops[0].size == 64, ops[1].reg, ops[0], 0x0F, 0xA3 + (unsigned)(k - 4) * 8);
+        }
         emit(u, c);
         return;
     }

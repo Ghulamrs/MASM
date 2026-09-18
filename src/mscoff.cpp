@@ -157,7 +157,7 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
             continue;
         const Symbol &s = u.symbols[i];
         name8(out, s.name, strings);
-        u32(out, s.defined ? (unsigned long)s.value : 0);
+        u32(out, s.defined || s.common ? (unsigned long)s.value : 0);
         u16(out, s.defined ? (unsigned)(s.section + 1) : 0);
         /* an extern carries no type, whatever it was declared as; a label in a code section
            is class Label (6), a data name or a private PROC Static (3) */

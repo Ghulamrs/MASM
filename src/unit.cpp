@@ -111,6 +111,8 @@ int Unit::ref(const std::string &name)
     s.pass = 0;
     s.prev_section = -1;
     s.prev_value = 0;
+    s.common = false;
+    s.externdef = false;
     symbols.push_back(s);
     return (int)symbols.size() - 1;
 }
@@ -215,7 +217,9 @@ void Unit::difference(unsigned long at, int sym, int sub, int width)
 void Unit::resolve(const Target &t)
 {
     for (size_t i = 0; i < symbols.size(); i++) {
-        const Symbol &s = symbols[i];
+        Symbol &s = symbols[i];
+        /* EXTERNDEF settles here: defined in this file, it is public; not, it is extern */
+        if (s.externdef && s.bind == B_LOCAL) s.bind = s.defined ? B_GLOBAL : B_EXTERN;
         if (!s.defined && s.bind != B_EXTERN) {
             line = s.line;
             error("'" + s.name + "' is not defined");

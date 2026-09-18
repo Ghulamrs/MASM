@@ -1,6 +1,7 @@
 #include "x64.h"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 struct RegName {
     const char *name;
@@ -63,9 +64,33 @@ static int data_width(const std::string &w)
 {
     if (w == "DB") return 1;
     if (w == "DW") return 2;
-    if (w == "DD") return 4;
-    if (w == "DQ") return 8;
+    if (w == "DD" || w == "REAL4") return 4;
+    if (w == "DQ" || w == "REAL8") return 8;
     return 0;
+}
+
+/* a real in a DD/DQ/REAL4/REAL8 item: the bits of the float or the double, as ml64 stores them */
+static bool real_item(const std::vector<Token> &t, size_t a, size_t b, int width, Unit &u, bool &handled)
+{
+    handled = false;
+    size_t r = a;
+    bool neg = false;
+    if (b - a == 2 && t[a].kind == T_PUNCT && (t[a].text == "-" || t[a].text == "+")) { neg = t[a].text == "-"; r = a + 1; }
+    if (b - r != 1 || t[r].kind != T_REAL) return true;
+    handled = true;
+    if (width != 4 && width != 8) { u.error("a real needs DD, DQ, REAL4 or REAL8"); return false; }
+    double d = neg ? -t[r].real : t[r].real;
+    if (width == 4) {
+        float f = (float)d;
+        unsigned long bits;
+        memcpy(&bits, &f, 4);
+        u.emit32(bits & 0xFFFFFFFFUL);
+    } else {
+        unsigned long long bits;
+        memcpy(&bits, &d, 8);
+        u.emit64(bits);
+    }
+    return true;
 }
 
 static void split_items(const std::vector<Token> &t, size_t from, std::vector<size_t> &cuts)
@@ -80,7 +105,7 @@ static void split_items(const std::vector<Token> &t, size_t from, std::vector<si
     cuts.push_back(t.size() + 1);
 }
 
-X64Target::X64Target() : done(false), pass(0), proc(-1), jn(0), grew(false), proc_private(false), frame(false),
+X64Target::X64Target() : done(false), pass(0), proc(-1), anon(0), jn(0), grew(false), proc_private(false), frame(false),
     frame_start(0), frame_reg(0), frame_off(0), prolog_end(-1), xdatasym(-1)
 {
 }
@@ -90,6 +115,7 @@ void X64Target::begin_pass(int p)
     done = false;
     pass = p;
     proc = -1;
+    anon = 0;
     jn = 0;
     grew = false;
     segs.clear();
@@ -166,17 +192,35 @@ bool X64Target::finished() const
 void X64Target::statement(Unit &u, std::vector<Token> &t)
 {
     if (t.size() >= 2 && t[0].kind == T_NAME && is_punct(t, 1, ':')) {
-        u.define(t[0].text, SYM_NEAR);
-        t.erase(t.begin(), t.begin() + 2);
+        /* `name::` is MASM's label visible outside its PROC, which every label is here;
+           `@@:` is an anonymous label, the nearest one back being @B and forward @F */
+        size_t colons = is_punct(t, 2, ':') ? 2 : 1;
+        if (t[0].text == "@@") { anon++; u.define("@@" + std::to_string(anon), SYM_NEAR); }
+        else u.define(t[0].text, SYM_NEAR);
+        t.erase(t.begin(), t.begin() + 1 + (std::ptrdiff_t)colons);
         if (t.empty())
             return;
     }
+    for (size_t i = 0; i < t.size(); i++)
+        if (t[i].kind == T_NAME && (t[i].text == "@B" || t[i].text == "@b")) t[i].text = "@@" + std::to_string(anon);
+        else if (t[i].kind == T_NAME && (t[i].text == "@F" || t[i].text == "@f")) t[i].text = "@@" + std::to_string(anon + 1);
     if (t[0].kind != T_NAME) {
         u.error("statement expected");
         return;
     }
     if (directive(u, t))
         return;
+    /* LOCK and the REP family are one prefix byte in front of the instruction they qualify */
+    {
+        std::string w = upper(t[0].text);
+        unsigned prefix = w == "LOCK" ? 0xF0 : (w == "REP" || w == "REPE" || w == "REPZ") ? 0xF3
+                        : (w == "REPNE" || w == "REPNZ") ? 0xF2 : 0;
+        if (prefix != 0) {
+            if (t.size() < 2 || t[1].kind != T_NAME) { u.error(w + " needs an instruction after it"); return; }
+            if (u.cur() && u.cur()->code) u.emit8(prefix);
+            t.erase(t.begin());
+        }
+    }
 
     std::vector<Operand> ops;
     std::vector<size_t> cuts;
@@ -243,6 +287,60 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
     }
     if (w == "TITLE" || w == "SUBTITLE" || w == "SUBTTL" || w == "PAGE" ||
         w == ".LIST" || w == ".NOLIST" || w == ".XLIST" || w == ".LISTALL" || w == ".LISTIF" || w == ".NOLISTIF") {
+        return true;
+    }
+    if (w == "COMM") {
+        /* COMM name:type[:count]: an external the linker allocates, its size in the value -
+           UNDEF External with value 8 for a QWORD, 16 for BYTE:16, as ml64 writes it */
+        size_t k = 1;
+        if (t.size() < 2) { u.error("COMM needs a name"); return true; }
+        while (k < t.size()) {
+            if (t[k].kind != T_NAME || !is_punct(t, k + 1, ':') || k + 2 >= t.size() || t[k + 2].kind != T_NAME) {
+                u.error("COMM takes name:type[:count]");
+                return true;
+            }
+            int s = u.ref(t[k].text);
+            Symbol &sym = u.symbols[s];
+            std::string type = upper(t[k + 2].text);
+            long long each = type == "BYTE" ? 1 : type == "WORD" ? 2 : (type == "DWORD" || type == "REAL4") ? 4
+                           : (type == "QWORD" || type == "REAL8") ? 8 : (type == "XMMWORD" || type == "OWORD") ? 16 : 0;
+            if (each == 0) { u.error("COMM needs BYTE, WORD, DWORD, QWORD, REAL4, REAL8 or XMMWORD"); return true; }
+            k += 3;
+            long long count = 1;
+            if (is_punct(t, k, ':')) {
+                if (k + 1 >= t.size() || t[k + 1].kind != T_NUM) { u.error("COMM count expected after ':'"); return true; }
+                count = t[k + 1].value;
+                k += 2;
+            }
+            if (sym.defined || sym.bind == B_CONST || sym.bind == B_GLOBAL) u.error("'" + sym.name + "' is already defined");
+            else { sym.bind = B_EXTERN; sym.type = (int)each; sym.value = each * count; sym.common = true; }
+            if (k < t.size()) { if (!is_punct(t, k, ',')) { u.error("',' expected"); return true; } k++; }
+        }
+        return true;
+    }
+    if (w == "EXTERNDEF") {
+        /* EXTERNDEF name:type: PUBLIC if the file defines it, EXTERN if it only uses it */
+        if (t.size() < 2) { u.error("EXTERNDEF needs a name"); return true; }
+        size_t k = 1;
+        while (k < t.size()) {
+            if (t[k].kind != T_NAME) { u.error("name expected"); return true; }
+            int s = u.ref(t[k].text);
+            u.symbols[s].externdef = true;
+            k++;
+            if (is_punct(t, k, ':')) {
+                if (k + 1 >= t.size() || t[k + 1].kind != T_NAME) { u.error("type expected after ':'"); return true; }
+                std::string type = upper(t[k + 1].text);
+                Symbol &sym = u.symbols[s];
+                if (!sym.defined) {
+                    sym.function = type == "PROC";
+                    sym.type = (type == "PROC" || type == "NEAR" || type == "FAR") ? SYM_NEAR : type == "BYTE" ? 1 : type == "WORD" ? 2
+                             : (type == "DWORD" || type == "REAL4") ? 4 : (type == "QWORD" || type == "REAL8") ? 8
+                             : (type == "XMMWORD" || type == "OWORD") ? 16 : SYM_UNTYPED;
+                }
+                k += 2;
+            }
+            if (k < t.size()) { if (!is_punct(t, k, ',')) { u.error("',' expected"); return true; } k++; }
+        }
         return true;
     }
     if (w == "PUBLIC" || w == "EXTERN" || w == "EXTRN") {
@@ -690,6 +788,11 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
             for (size_t k = 0; k < t[a].text.size(); k++)
                 u.emit8((unsigned char)t[a].text[k]);
             continue;
+        }
+        {
+            bool handled;
+            if (!real_item(t, a, b, width, u, handled)) return;
+            if (handled) continue;
         }
         if (dup < b) {
             long long count;

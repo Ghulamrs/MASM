@@ -136,6 +136,17 @@ static bool binary(ExprState &e, char op, Value &a, const Value &b)
         if (y == 0) { e.err = "division by zero"; return false; }
         a.v = op == '/' ? x / y : x % y;
         return true;
+    case '<': a.v = y >= 64 ? 0 : (long long)((unsigned long long)x << y); return true;
+    case '>': a.v = y >= 64 ? 0 : (long long)((unsigned long long)x >> y); return true;
+    case '&': a.v = x & y; return true;
+    case '|': a.v = x | y; return true;
+    case '^': a.v = x ^ y; return true;
+    case 'E': a.v = x == y ? -1 : 0; return true;
+    case 'N': a.v = x != y ? -1 : 0; return true;
+    case 'l': a.v = x < y ? -1 : 0; return true;
+    case 'L': a.v = x <= y ? -1 : 0; return true;
+    case 'g': a.v = x > y ? -1 : 0; return true;
+    case 'G': a.v = x >= y ? -1 : 0; return true;
     }
     e.err = "bad operator";
     return false;
@@ -156,6 +167,9 @@ static bool prefix(ExprState &e, char op, Value &v)
     }
     if (not_const(e, v)) return false;
     if (op == '-') v.v = -v.v;
+    else if (op == '~') v.v = ~v.v;
+    else if (op == 'w') v.v = v.v & 0xFF;
+    else if (op == 'W') v.v = (v.v >> 8) & 0xFF;
     return true;
 }
 
@@ -180,6 +194,22 @@ static bool binary_op(const Token &k, Op &op)
         if (c == '+' || c == '-') { op.prec = 5; op.c = c; return true; }
         return false;
     }
+    if (k.kind != T_NAME) return false;
+    /* MASM's word operators, at its levels: MOD SHL SHR with * and /, then + -, then the
+       comparisons (true is -1), then AND, then OR and XOR; NOT is a prefix below the comparisons */
+    std::string w = upper(k.text);
+    if (w == "MOD") { op.prec = 6; op.c = '%'; return true; }
+    if (w == "SHL") { op.prec = 6; op.c = '<'; return true; }
+    if (w == "SHR") { op.prec = 6; op.c = '>'; return true; }
+    if (w == "EQ") { op.prec = 4; op.c = 'E'; return true; }
+    if (w == "NE") { op.prec = 4; op.c = 'N'; return true; }
+    if (w == "LT") { op.prec = 4; op.c = 'l'; return true; }
+    if (w == "LE") { op.prec = 4; op.c = 'L'; return true; }
+    if (w == "GT") { op.prec = 4; op.c = 'g'; return true; }
+    if (w == "GE") { op.prec = 4; op.c = 'G'; return true; }
+    if (w == "AND") { op.prec = 2; op.c = '&'; return true; }
+    if (w == "OR") { op.prec = 1; op.c = '|'; return true; }
+    if (w == "XOR") { op.prec = 1; op.c = '^'; return true; }
     return false;
 }
 
@@ -192,6 +222,9 @@ static bool prefix_op(const Token &k, Op &op)
     std::string w = upper(k.text);
     if (w == "OFFSET") { op.prec = 9; op.c = 'O'; return true; }
     if (w == "IMAGEREL") { op.prec = 9; op.c = 'I'; return true; }
+    if (w == "NOT") { op.prec = 3; op.c = '~'; return true; }
+    if (w == "LOW") { op.prec = 9; op.c = 'w'; return true; }
+    if (w == "HIGH") { op.prec = 9; op.c = 'W'; return true; }
     return false;
 }
 
@@ -229,6 +262,10 @@ static bool atom(ExprState &e, const Token &k, Value &v)
         else
             v.sym = e.u->ref(k.text);
         return true;
+    }
+    if (k.kind == T_REAL) {
+        e.err = "a real is only stored by DD, DQ, REAL4 or REAL8, not computed with";
+        return false;
     }
     e.err = "unexpected '" + k.text + "'";
     return false;
