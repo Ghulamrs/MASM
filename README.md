@@ -95,8 +95,12 @@ dumpbin /disasm /relocations mine.obj > mine.txt
 fc ref.txt mine.txt
 ```
 
-Encodings were checked byte for byte against GNU `as`, and follow MASM's register-to-register
-form (`8B`, `03`, ...). Stage 2 begins with this ml64 comparison.
+Encodings are ml64's byte for byte, where ml64 has a choice: `test a, b` puts the first operand in
+the reg field (`48 85 C1`), `mov r64, imm` takes the 64-bit form when the literal was spelled as one
+(`0FFFFFFFFFFFFFFFFh` or a decimal of 2^32 or more) and the sign-extended 32-bit form otherwise,
+`[reg*1]` with no base stays an index (a SIB with no base), `RET 0` is `C3`, and `ALIGN` in code pads
+with one long NOP (`0F 1F /0` with `66` prefixes, up to 15 bytes). The 681 `.asm` files the compilers
+emit for x86_64-windows assemble to the same bytes as ml64's objects, every instruction.
 
 ## Next
 

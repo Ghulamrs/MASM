@@ -308,8 +308,22 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
             u.error(std::string("invalid combination with segment alignment : ") + buf);
             return true;
         }
-        while (u.here() % (unsigned long)n)
-            u.emit8(s->code ? 0x90 : 0);
+        {
+            /* ml64 pads code with one long NOP: 0F 1F /0 with the widest ModRM the count
+               allows, 66 prefixes making up the rest, measured up to 15 */
+            unsigned long gap = (unsigned long)n - u.here() % (unsigned long)n;
+            if (gap == (unsigned long)n) gap = 0;
+            if (!s->code) { while (gap--) u.emit8(0); return true; }
+            static const unsigned char body[9][9] = {
+                {}, {0x90}, {0x66, 0x90}, {0x0F, 0x1F, 0x00}, {0x0F, 0x1F, 0x40, 0x00},
+                {0x0F, 0x1F, 0x44, 0x00, 0x00}, {0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00},
+                {0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00},
+                {0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00}
+            };
+            if (gap <= 8) { for (unsigned long i = 0; i < gap; i++) u.emit8(body[gap][i]); return true; }
+            for (unsigned long i = 8; i < gap; i++) u.emit8(0x66);
+            for (int i = 0; i < 8; i++) u.emit8(body[8][i]);
+        }
         return true;
     }
     if (w == "ORG") {
@@ -965,10 +979,6 @@ bool X64Target::memory(Unit &u, const std::vector<Token> &t, const std::vector<s
     }
     o.label = o.sym >= 0 && o.base < 0 && o.index < 0;
     o.value = acc.v;
-    if (o.base < 0 && o.index >= 0 && o.scale == 1) {
-        o.base = o.index;
-        o.index = -1;
-    }
     if (o.value < -2147483648LL || o.value > 2147483647LL) {
         u.error("displacement does not fit in 32 bits");
         return false;

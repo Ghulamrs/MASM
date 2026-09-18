@@ -402,6 +402,7 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
     if (k >= 0 || name == "CQO" || name == "CDQE") {
         if (n == 1 && name == "RET" && ops[0].kind == O_IMM) {
             if (ops[0].value < 0 || ops[0].value > 0xFFFF) { u.error("RET value does not fit"); return; }
+            if (ops[0].value == 0) { u.emit8(0xC3); return; }   /* ml64 writes RET 0 as RET */
             u.emit8(0xC2);
             u.emit16((unsigned)ops[0].value);
             return;
@@ -438,8 +439,10 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
             if (!same_size(u, d, s)) return;
             int size = d.size;
             if (test) {
-                if (s.kind == O_REG) rm(c, size, s.reg, d, 0x85);
-                else rm(c, size, d.reg, s, 0x85);
+                /* ml64 puts the first operand in the reg field whenever it is a register:
+                   test rax,rcx is 48 85 C1, and test rax,[m] the same 85 /r */
+                if (d.kind == O_REG) rm(c, size, d.reg, s, 0x85);
+                else rm(c, size, s.reg, d, 0x85);
             } else if (d.kind == O_REG) {
                 rm(c, size, d.reg, s, mov ? 0x8B : (unsigned)(k * 8 + 3));
             } else {
@@ -455,7 +458,7 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
             u.error("OFFSET is only taken by MOV into a 64-bit register in this version");
             return;
         }
-        if (mov && d.kind == O_REG && size == 64 && (s.sym >= 0 || !fits32(v))) {
+        if (mov && d.kind == O_REG && size == 64 && (s.sym >= 0 || !fits32(v) || s.wide)) {
             put(c, 0x48 | ((d.reg & 8) ? 1 : 0));
             put(c, 0xB8 | (d.reg & 7));
             if (s.sym >= 0) { c.disp_at = c.n; c.sym = s.sym; c.kind = R_ADDR64; }
