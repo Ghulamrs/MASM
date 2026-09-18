@@ -21,6 +21,8 @@ struct Reloc {
     unsigned long offset;
     int symbol;
     RelKind kind;
+    long long addend;   /* the label's offset, also written in place: COFF reads the field, a RELA
+                           writer (TI's ELF) reads this and zeroes the field */
 };
 
 struct Section {
@@ -61,6 +63,7 @@ struct Fixup {
     int sub;        /* R_DIFF: the label subtracted */
     int width;      /* R_DIFF: bytes to write */
     RelKind kind;
+    long long addend;
     bool branch;    /* a CALL, JMP or Jcc: resolved here when the target is in the section, as ml64 does */
     int line;
 };
@@ -109,7 +112,7 @@ public:
     void emit16(unsigned v);
     void emit32(unsigned long v);
     void emit64(unsigned long long v);
-    void fixup(unsigned long at, int sym, RelKind kind);
+    void fixup(unsigned long at, int sym, RelKind kind, long long addend = 0);
     void difference(unsigned long at, int sym, int sub, int width);
 
     void resolve(const Target &t);

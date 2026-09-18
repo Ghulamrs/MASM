@@ -29,6 +29,7 @@ struct Code {
     int n;
     int disp_at;
     int sym;
+    long long addend;   /* the label's offset in the displacement, for a RELA writer */
     RelKind kind;
     bool rex;       /* a REX prefix is needed even with no bits set */
     bool high;      /* a high byte register is an operand */

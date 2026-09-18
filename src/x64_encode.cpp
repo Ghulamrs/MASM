@@ -5,6 +5,7 @@ static void start(Code &c)
     c.n = 0;
     c.disp_at = -1;
     c.sym = -1;
+    c.addend = 0;
     c.kind = R_REL32;
     c.rex = false;
     c.high = false;
@@ -80,6 +81,7 @@ static void rm_code(Code &c, bool w, int regf, const Operand &m, const unsigned 
         put(c, 0x05 | r);
         c.disp_at = c.n;
         c.sym = m.sym;
+        c.addend = m.value;
         put32(c, m.value);
         return;
     }
@@ -88,7 +90,7 @@ static void rm_code(Code &c, bool w, int regf, const Operand &m, const unsigned 
     if (m.base < 0) {
         put(c, 0x04 | r);
         put(c, (sb << 6) | ((m.index < 0 ? 4 : m.index & 7) << 3) | 5);
-        if (m.sym >= 0) { c.disp_at = c.n; c.sym = m.sym; c.kind = R_ADDR32; }
+        if (m.sym >= 0) { c.disp_at = c.n; c.sym = m.sym; c.kind = R_ADDR32; c.addend = m.value; }
         put32(c, m.value);
         return;
     }
@@ -105,7 +107,7 @@ static void rm_code(Code &c, bool w, int regf, const Operand &m, const unsigned 
     }
     if (mod == 0x40) put(c, (unsigned)m.value & 0xFF);
     else if (mod == 0x80) {
-        if (m.sym >= 0) { c.disp_at = c.n; c.sym = m.sym; c.kind = R_ADDR32; }
+        if (m.sym >= 0) { c.disp_at = c.n; c.sym = m.sym; c.kind = R_ADDR32; c.addend = m.value; }
         put32(c, m.value);
     }
 }
@@ -153,7 +155,7 @@ static void emit(Unit &u, const Code &c)
         int after = c.n - (c.disp_at + 4);
         if (kind == R_REL32 && after > 0)
             kind = (RelKind)(R_REL32_1 + after - 1);
-        u.fixup(at + c.disp_at, c.sym, kind);
+        u.fixup(at + c.disp_at, c.sym, kind, c.addend);
     }
 }
 
@@ -166,6 +168,7 @@ static void branch(Unit &u, int prefix, unsigned op, const Operand &o, int width
     put(c, op);
     c.disp_at = c.n;
     c.sym = o.sym;
+    c.addend = o.value;
     if (width == 1) {
         c.kind = R_REL8;
         put(c, (unsigned)o.value & 0xFF);
@@ -469,6 +472,7 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
             put(c, 0xB8 | (d.reg & 7));
             c.disp_at = c.n;
             c.sym = s.sym;
+            c.addend = s.value;
             c.kind = R_ADDR64;
             for (int i = 0; i < 8; i++)
                 put(c, (unsigned)((unsigned long long)s.value >> (8 * i)) & 0xFF);
@@ -501,7 +505,7 @@ void X64Target::instruction(Unit &u, const std::string &name, std::vector<Operan
         if (mov && d.kind == O_REG && size == 64 && (s.sym >= 0 || !fits32(v) || s.wide)) {
             put(c, 0x48 | ((d.reg & 8) ? 1 : 0));
             put(c, 0xB8 | (d.reg & 7));
-            if (s.sym >= 0) { c.disp_at = c.n; c.sym = s.sym; c.kind = R_ADDR64; }
+            if (s.sym >= 0) { c.disp_at = c.n; c.sym = s.sym; c.kind = R_ADDR64; c.addend = v; }
             for (int i = 0; i < 8; i++)
                 put(c, (unsigned)((unsigned long long)v >> (8 * i)) & 0xFF);
             emit(u, c);

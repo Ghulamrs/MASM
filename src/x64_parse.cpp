@@ -682,9 +682,9 @@ void X64Target::end_frame(Unit &u)
     u.section(".pdata", false, false, true, 4);
     u.fixup(u.here(), proc, R_ADDR32NB);
     u.emit32(0);
-    u.fixup(u.here(), proc, R_ADDR32NB);
+    u.fixup(u.here(), proc, R_ADDR32NB, (long long)size);
     u.emit32(size);
-    u.fixup(u.here(), xdatasym, R_ADDR32NB);
+    u.fixup(u.here(), xdatasym, R_ADDR32NB, (long long)(xoff - (unsigned long)u.symbols[xdatasym].value));
     u.emit32(xoff - (unsigned long)u.symbols[xdatasym].value);
     u.current = save;
 }
@@ -823,7 +823,7 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
         if (v.sym >= 0) {
             if (v.imagerel && width != 4) { u.error("IMAGEREL needs DD"); return; }
             if (width < 4) { u.error("an address needs DD or DQ"); return; }
-            u.fixup(u.here(), v.sym, v.imagerel ? R_ADDR32NB : width == 8 ? R_ADDR64 : R_ADDR32);
+            u.fixup(u.here(), v.sym, v.imagerel ? R_ADDR32NB : width == 8 ? R_ADDR64 : R_ADDR32, v.v);
             put(u, width, v.v);
             continue;
         }

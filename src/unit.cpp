@@ -192,7 +192,7 @@ void Unit::emit64(unsigned long long v)
     emit32((unsigned long)(v >> 32));
 }
 
-void Unit::fixup(unsigned long at, int sym, RelKind kind)
+void Unit::fixup(unsigned long at, int sym, RelKind kind, long long addend)
 {
     Fixup f;
     f.section = current;
@@ -201,6 +201,7 @@ void Unit::fixup(unsigned long at, int sym, RelKind kind)
     f.sub = -1;
     f.width = 4;
     f.kind = kind;
+    f.addend = addend;
     f.branch = false;
     f.line = line;
     fixups.push_back(f);
@@ -268,6 +269,7 @@ void Unit::resolve(const Target &t)
         r.offset = f.at;
         r.symbol = f.symbol;
         r.kind = f.kind;
+        r.addend = f.addend;
         sec.relocs.push_back(r);
     }
 }
