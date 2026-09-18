@@ -80,7 +80,9 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
         const Symbol &s = u.symbols[i];
         if (s.bind == B_CONST || (!s.defined && s.bind != B_EXTERN))
             continue;
-        if (s.name[0] == '\001' && !referenced[i])
+        /* ml64 writes a Static symbol only when a relocation refers to it - a PROC always,
+           a label or a data name only if something outside its section points at it */
+        if (s.bind == B_LOCAL && !s.function && !referenced[i])
             continue;
         index[i] = count++;
     }
@@ -157,8 +159,12 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
         name8(out, s.name, strings);
         u32(out, s.defined ? (unsigned long)s.value : 0);
         u16(out, s.defined ? (unsigned)(s.section + 1) : 0);
-        u16(out, s.function ? 0x20 : 0);
-        u8(out, s.bind == B_LOCAL ? 3 : 2);
+        /* an extern carries no type, whatever it was declared as; a label in a code section
+           is class Label (6), a data name or a private PROC Static (3) */
+        u16(out, s.function && s.defined ? 0x20 : 0);
+        const bool codeLabel = s.defined && !s.function && s.type == SYM_NEAR &&
+                               u.sections[s.section].code;
+        u8(out, s.bind != B_LOCAL ? 2 : codeLabel ? 6 : 3);
         u8(out, 0);
     }
     u32(out, (unsigned long)(strings.size() + 4));

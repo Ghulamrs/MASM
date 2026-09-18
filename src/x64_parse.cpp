@@ -208,7 +208,7 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
         if (t.size() != 1) u.error("unexpected text after " + w);
         if (proc >= 0) u.error("section change inside PROC");
         if (!segs.empty()) u.error("SEGMENT without ENDS");
-        if (w == ".CODE") u.section(".text", true, false, false, 16);
+        if (w == ".CODE") u.section(".text$mn", true, false, false, 16);
         else if (w == ".DATA") u.section(".data", false, false, false, 16);
         else if (w == ".CONST") u.section(".rdata", false, false, true, 16);
         else u.section(".bss", false, true, false, 16);
@@ -600,7 +600,7 @@ void X64Target::segment(Unit &u, const std::vector<Token> &t)
     bool bss = false;
     bool readonly = false;
     int align = 16;
-    if (up == "_TEXT") { name = ".text"; code = true; }
+    if (up == "_TEXT") { name = ".text$mn"; code = true; }
     else if (up == "_DATA") name = ".data";
     else if (up == "CONST") { name = ".rdata"; readonly = true; }
     else if (up == "_BSS") { name = ".bss"; bss = true; }

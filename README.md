@@ -99,8 +99,12 @@ Encodings are ml64's byte for byte, where ml64 has a choice: `test a, b` puts th
 the reg field (`48 85 C1`), `mov r64, imm` takes the 64-bit form when the literal was spelled as one
 (`0FFFFFFFFFFFFFFFFh` or a decimal of 2^32 or more) and the sign-extended 32-bit form otherwise,
 `[reg*1]` with no base stays an index (a SIB with no base), `RET 0` is `C3`, and `ALIGN` in code pads
-with one long NOP (`0F 1F /0` with `66` prefixes, up to 15 bytes). The 681 `.asm` files the compilers
-emit for x86_64-windows assemble to the same bytes as ml64's objects, every instruction.
+with one long NOP (`0F 1F /0` with `66` prefixes, up to 15 bytes). The object is ml64's too: `.text$mn`
+and then `.data` are opened before the first line and every other section numbered by first use; an
+extern carries no type; a label in a code section is class Label, a data name or a private `PROC`
+Static; and a Static symbol is written only when a relocation refers to it (a `PROC` always). The
+681 `.asm` files the compilers emit for x86_64-windows assemble to ml64's bytes, relocations and
+symbols, every file. What ml64 adds and this does not: `@comp.id`, `@feat.00`, `.debug$S`, a timestamp.
 
 ## Next
 

@@ -16,6 +16,11 @@ void Unit::begin_pass(int n)
         prev_sizes.push_back((unsigned long)sections[i].bytes.size());
     sections.clear();
     current = -1;
+    /* ml64 opens .text$mn and then .data before it reads a line, empty or not, and every
+       other section takes its number from first use - the order dumpbin shows */
+    section(".text$mn", true, false, false, 16);
+    section(".data", false, false, false, 16);
+    current = -1;
     fixups.clear();
     errors.clear();
     line = 0;
@@ -226,18 +231,18 @@ void Unit::resolve(const Target &t)
         }
         Section &sec = sections[f.section];
         if (f.kind == R_DIFF) {
-            const Symbol &t = symbols[f.sub];
-            if (t.bind == B_CONST) { error("'" + t.name + "' is a constant, not an address"); continue; }
-            if (!s.defined || !t.defined) continue;
-            if (s.section != t.section) { error("labels in different sections cannot be subtracted"); continue; }
-            long long d = s.value - t.value;
-            for (int i = 0; i < f.width; i++)
-                d += (long long)sec.bytes[f.at + i] << (8 * i);
+            const Symbol &sub = symbols[f.sub];
+            if (sub.bind == B_CONST) { error("'" + sub.name + "' is a constant, not an address"); continue; }
+            if (!s.defined || !sub.defined) continue;
+            if (s.section != sub.section) { error("labels in different sections cannot be subtracted"); continue; }
+            long long d = s.value - sub.value;
+            for (int b = 0; b < f.width; b++)
+                d += (long long)sec.bytes[f.at + b] << (8 * b);
             long long lo = f.width == 8 ? 0 : -(1LL << (f.width * 8 - 1));
             long long hi = f.width == 8 ? 0 : (1LL << (f.width * 8)) - 1;
             if (f.width != 8 && (d < lo || d > hi)) { error("label difference does not fit"); continue; }
-            for (int i = 0; i < f.width; i++)
-                sec.bytes[f.at + i] = (unsigned char)((unsigned long long)d >> (8 * i));
+            for (int b = 0; b < f.width; b++)
+                sec.bytes[f.at + b] = (unsigned char)((unsigned long long)d >> (8 * b));
             continue;
         }
         long long v;
