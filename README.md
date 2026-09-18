@@ -127,7 +127,9 @@ the reg field (`48 85 C1`), `mov r64, imm` takes the 64-bit form when the litera
 with one long NOP (`0F 1F /0` with `66` prefixes, up to 15 bytes). The object is ml64's too: `.text$mn`
 and then `.data` are opened before the first line and every other section numbered by first use; an
 extern carries no type; a label in a code section is class Label, a data name or a private `PROC`
-Static; and a Static symbol is written only when a relocation refers to it (a `PROC` always). The
+Static; a Static symbol is written only when a relocation refers to it (a `PROC` always); and past
+65535 relocations in a section the count goes in a leading entry with `IMAGE_SCN_LNK_NRELOC_OVFL`
+set, as ml64 writes it. The
 681 `.asm` files the compilers emit for x86_64-windows assemble to ml64's bytes, relocations and
 symbols, every file. What ml64 adds and this does not: `@comp.id`, `@feat.00`, `.debug$S`, a timestamp.
 

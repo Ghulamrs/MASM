@@ -109,23 +109,27 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
         u32(out, 0);
         u32(out, 0);
         u32(out, 0);
-        u16(out, (unsigned)s.relocs.size());
+        /* past 65535 relocations the count goes in a leading entry (IMAGE_SCN_LNK_NRELOC_OVFL),
+           the header saying 0xFFFF - measured with ml64: 70,000 DQ label give 70001 there */
+        const bool overflow = s.relocs.size() >= 0xFFFF;
+        u16(out, overflow ? 0xFFFF : (unsigned)s.relocs.size());
         u16(out, 0);
-        u32(out, characteristics(s));
+        u32(out, characteristics(s) | (overflow ? 0x01000000UL : 0));
     }
 
     for (size_t i = 0; i < nsec; i++) {
         const Section &s = u.sections[i];
-        if (s.relocs.size() > 0xFFFF) {
-            err = "too many relocations in " + s.name;
-            return false;
-        }
         if (!s.bytes.empty() && !s.bss) {
             set32(out, header_at[i] + 20, (unsigned long)out.size());
             out.insert(out.end(), s.bytes.begin(), s.bytes.end());
         }
         if (!s.relocs.empty()) {
             set32(out, header_at[i] + 24, (unsigned long)out.size());
+            if (s.relocs.size() >= 0xFFFF) {
+                u32(out, (unsigned long)s.relocs.size() + 1);
+                u32(out, 0);
+                u16(out, 0);
+            }
             for (size_t r = 0; r < s.relocs.size(); r++) {
                 u32(out, s.relocs[r].offset);
                 u32(out, (unsigned long)index[s.relocs[r].symbol]);
@@ -144,7 +148,7 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
         u8(out, 3);
         u8(out, 1);
         u32(out, (unsigned long)s.bytes.size());
-        u16(out, (unsigned)s.relocs.size());
+        u16(out, s.relocs.size() >= 0xFFFF ? 0xFFFF : (unsigned)s.relocs.size());
         u16(out, 0);
         u32(out, 0);
         u16(out, 0);
