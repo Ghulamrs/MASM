@@ -51,6 +51,8 @@ private:
     int proc;
     int anon;                           /* the @@ labels defined so far this pass */
     std::vector<unsigned char> jsize;   /* each jump in source order: 0 short, 1 near; only ever grows */
+    std::vector<long long> jhere;       /* where each jump was in the previous pass, for a forward target
+                                           whose value is that pass's too - the two must not be mixed */
     size_t jn;                          /* the jumps seen this pass */
     bool grew;                          /* a jump was widened this pass */
     bool proc_private;                  /* OPTION PROC:PRIVATE: PROCs are Static unless PUBLIC */

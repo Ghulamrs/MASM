@@ -69,6 +69,19 @@ static int data_width(const std::string &w)
     return 0;
 }
 
+/* the type names ml64 takes as data directives too - shci writes `shm_globals QWORD 2 DUP (0)`
+   - which they are unless PTR follows, as in `mov DWORD PTR [r11], eax` */
+static int type_data_width(const std::vector<Token> &t, size_t i)
+{
+    if (i >= t.size() || t[i].kind != T_NAME || is_word(t, i + 1, "PTR")) return 0;
+    const std::string &w = t[i].text;
+    if (w == "BYTE" || w == "SBYTE") return 1;
+    if (w == "WORD" || w == "SWORD") return 2;
+    if (w == "DWORD" || w == "SDWORD") return 4;
+    if (w == "QWORD" || w == "SQWORD") return 8;
+    return 0;
+}
+
 /* a real in a DD/DQ/REAL4/REAL8 item: the bits of the float or the double, as ml64 stores them */
 static bool real_item(const std::vector<Token> &t, size_t a, size_t b, int width, Unit &u, bool &handled)
 {
@@ -157,12 +170,21 @@ bool X64Target::resolve_here(const Unit &u, const Fixup &f, const Symbol &s, lon
 
 /* the width of a JMP or Jcc: SHORT or NEAR PTR decide; otherwise short when the target is known
    to be in reach, near once it was ever found not to be (the choice only widens, pass by pass);
-   a target not seen yet is assumed short on the first pass */
+   a target not seen yet is assumed short on the first pass.
+
+   A forward target's value is the previous pass's, so the distance to it is measured from
+   where this jump was in that pass, not where it is now: with jumps before it widened in
+   between, the two differ by their growth, and a jump in easy reach read as out of it and
+   widened for good - shci's if_chain had 707 bytes of that, all Jcc rel32 that ml64 made rel8 */
 int X64Target::jump_width(Unit &u, const Operand &o)
 {
     size_t j = jn++;
-    if (j >= jsize.size())
+    if (j >= jsize.size()) {
         jsize.push_back(0);
+        jhere.push_back(-1);
+    }
+    long long was = jhere[j];
+    jhere[j] = (long long)u.here();
     if (o.near_ptr)
         return 4;
     const Symbol &s = u.symbols[o.sym];
@@ -176,7 +198,8 @@ int X64Target::jump_width(Unit &u, const Operand &o)
         if (!jsize[j]) { jsize[j] = 1; grew = true; }
         return 4;
     }
-    long long disp = s.value + o.value - (long long)(u.here() + 2);
+    long long from = s.pass == pass || was < 0 ? (long long)u.here() : was;
+    long long disp = s.value + o.value - (from + 2);
     if (disp >= -128 && disp <= 127)
         return 1;
     if (o.short_ptr) { u.error("jump destination too far"); return 1; }
@@ -441,6 +464,7 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
         return true;
     }
     int width = data_width(w);
+    if (!width) width = type_data_width(t, 0);
     if (width) {
         data(u, t, 1, width);
         return true;
@@ -515,6 +539,7 @@ bool X64Target::directive(Unit &u, std::vector<Token> &t)
         return true;
     }
     width = data_width(w2);
+    if (!width) width = type_data_width(t, 1);
     if (width) {
         if (u.define(t[0].text, width))
             data(u, t, 2, width);
@@ -787,9 +812,16 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
             continue;
         }
         size_t dup = dup_at(t, a, b);
-        if (sec->bss && !(dup < b && dup + 4 == b && t[dup + 2].text == "?")) {
-            u.error("initialised data in an uninitialised section");
-            return;
+        /* in a BSS section a value must be ? or a literal 0 - ml64 takes `QWORD 2 DUP (0)`
+           there, which is how shci spells its globals - and either way nothing is stored */
+        if (sec->bss) {
+            size_t v = dup < b ? dup + 2 : a;
+            bool zero = (dup < b ? dup + 4 == b : b - a == 1) &&
+                        (t[v].text == "?" || (t[v].kind == T_NUM && t[v].text == "0"));
+            if (!zero) {
+                u.error("initialised data in an uninitialised section");
+                return;
+            }
         }
         if (width == 1 && b - a == 1 && t[a].kind == T_STR) {
             if (t[a].text.empty()) u.error("empty string");
