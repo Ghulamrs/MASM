@@ -48,12 +48,14 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) target = argv[++i];
         else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) output = argv[++i];
-        else if (argv[i][0] == '/' && strchr(argv[i] + 1, '/') == 0 && strchr(argv[i] + 1, '\\') == 0 &&
-                 !std::ifstream(argv[i]).good()) {
+        else if (argv[i][0] == '/' && !std::ifstream(argv[i]).good() &&
+                 ((strchr(argv[i] + 1, '/') == 0 && strchr(argv[i] + 1, '\\') == 0) ||
+                  strncmp(argv[i], "/Fo", 3) == 0)) {
             /* ml64's own options, so that a build which ran `ml64 /nologo /c /Fo x.obj x.asm`
                runs this instead: /c and /nologo say nothing here, /Fo names the object, the
                listing and warning switches are taken and ignored. A Unix path also starts
-               with a slash, and is one when it has another slash in it or exists */
+               with a slash, and is one when it has another slash in it or exists - except
+               that /Fo with the path attached, as shci writes it, has slashes of its own */
             target = "x64";
             if (strncmp(argv[i], "/Fo", 3) == 0) {
                 if (argv[i][3] != '\0') output = argv[i] + 3;
