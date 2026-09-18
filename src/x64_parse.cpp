@@ -699,6 +699,8 @@ void X64Target::segment(Unit &u, const std::vector<Token> &t)
     bool bss = false;
     bool readonly = false;
     int align = 16;
+    int comdat = -1;
+    bool associative = false;
     if (up == "_TEXT") { name = ".text$mn"; code = true; }
     else if (up == "_DATA") name = ".data";
     else if (up == "CONST") { name = ".rdata"; readonly = true; }
@@ -716,6 +718,12 @@ void X64Target::segment(Unit &u, const std::vector<Token> &t)
         else if (is_word(t, k, "DWORD")) { align = 4; k++; }
         else if (is_word(t, k, "PARA")) { align = 16; k++; }
         else if (is_word(t, k, "PAGE")) { align = 256; k++; }
+        else if ((is_word(t, k, "COMDAT") || is_word(t, k, "ASSOCIATIVE")) && is_punct(t, k + 1, '(') &&
+                 k + 3 < t.size() && t[k + 2].kind == T_NAME && is_punct(t, k + 3, ')')) {
+            associative = is_word(t, k, "ASSOCIATIVE");
+            comdat = u.ref(t[k + 2].text);
+            k += 4;
+        }
         else if (t[k].kind == T_STR) {
             std::string cls = upper(t[k].text);
             if (cls == "CODE") code = true;
@@ -729,7 +737,7 @@ void X64Target::segment(Unit &u, const std::vector<Token> &t)
     if (proc >= 0) { u.error("SEGMENT inside PROC"); return; }
     segs.push_back(u.current);
     segnames.push_back(t[0].text);
-    u.section(name, code, bss, readonly, align);
+    u.section(name, code, bss, readonly, align, comdat, associative);
 }
 
 static size_t dup_at(const std::vector<Token> &t, size_t a, size_t b)

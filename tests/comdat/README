@@ -1,0 +1,14 @@
+COMDAT: a definition that may turn up in more than one object - an inline function, a template
+instantiation, a vtable - goes in a section of its own, and the linker keeps one copy and drops the
+rest (SELECT_ANY), or keeps a section with the one it belongs to (SELECT_ASSOCIATIVE: a function's
+unwind data). ml64 has no syntax for either; this assembler takes
+
+    .text$mn SEGMENT ALIGN(16) 'CODE' COMDAT(sym)          folded on sym, defined inside
+    .pdata SEGMENT READONLY ALIGN(4) 'DATA' ASSOCIATIVE(sym)   kept with the section sym's COMDAT opened
+
+c1.asm and c2.asm both define twice, helper and table; linked together by tests/windows/link.cmd
+they run and print c.expected. In the object the section carries IMAGE_SCN_LNK_COMDAT, its section
+symbol's auxiliary record the selection (2 or 5, with the associated section's number), and the key
+symbol follows the section symbol, which is where the linker looks for it - dumpbin shows
+"selection 2 (pick any)" and "(pick associative Section 0x6)". This is what lets cxx1 assemble its
+x86_64-windows C++ output here instead of through clang: its MASM spelling writes these clauses.

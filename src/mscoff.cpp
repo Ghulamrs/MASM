@@ -75,9 +75,33 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
     for (size_t i = 0; i < nsec; i++)
         for (size_t r = 0; r < u.sections[i].relocs.size(); r++)
             referenced[u.sections[i].relocs[r].symbol] = true;
-    long count = (long)nsec * 2;
+    /* a COMDAT's key symbol is always written, and right after its section's symbol, which is
+       where the linker looks for the symbol a COMDAT folds on; an ASSOCIATIVE section names
+       the section its key's COMDAT opened */
+    std::vector<int> keyOf(nsec, -1), assocOf(nsec, -1);
+    for (size_t i = 0; i < nsec; i++) {
+        const Section &s = u.sections[i];
+        if (s.comdat < 0) continue;
+        if (s.associative) {
+            for (size_t k = 0; k < nsec; k++)
+                if (u.sections[k].comdat == s.comdat && !u.sections[k].associative) { assocOf[i] = (int)k; break; }
+            if (assocOf[i] < 0) { err = "ASSOCIATIVE(" + u.symbols[s.comdat].name + "): no COMDAT section is keyed on it"; return false; }
+        } else {
+            const Symbol &key = u.symbols[s.comdat];
+            if (!key.defined || key.section != (int)i) { err = "COMDAT(" + key.name + "): the symbol is not defined in that section"; return false; }
+            keyOf[i] = s.comdat;
+            referenced[s.comdat] = true;
+        }
+    }
+    long count = 0;
+    for (size_t i = 0; i < nsec; i++) {
+        count += 2;
+        if (keyOf[i] >= 0) index[keyOf[i]] = count++;
+    }
     for (size_t i = 0; i < u.symbols.size(); i++) {
         const Symbol &s = u.symbols[i];
+        if (index[i] >= 0)
+            continue;
         if (s.bind == B_CONST || (!s.defined && s.bind != B_EXTERN))
             continue;
         /* ml64 writes a Static symbol only when a relocation refers to it - a PROC always,
@@ -114,7 +138,7 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
         const bool overflow = s.relocs.size() >= 0xFFFF;
         u16(out, overflow ? 0xFFFF : (unsigned)s.relocs.size());
         u16(out, 0);
-        u32(out, characteristics(s) | (overflow ? 0x01000000UL : 0));
+        u32(out, characteristics(s) | (overflow ? 0x01000000UL : 0) | (s.comdat >= 0 ? 0x00001000UL : 0));
     }
 
     for (size_t i = 0; i < nsec; i++) {
@@ -139,6 +163,20 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
     }
 
     set32(out, symptr_at, (unsigned long)out.size());
+    struct Sym {
+        static void put(Bytes &o, Bytes &str, const Unit &uu, const Symbol &s) {
+            name8(o, s.name, str);
+            u32(o, s.defined || s.common ? (unsigned long)s.value : 0);
+            u16(o, s.defined ? (unsigned)(s.section + 1) : 0);
+            /* an extern carries no type, whatever it was declared as; a label in a code section
+               is class Label (6), a data name or a private PROC Static (3) */
+            u16(o, s.function && s.defined ? 0x20 : 0);
+            const bool codeLabel = s.defined && !s.function && s.type == SYM_NEAR &&
+                                   uu.sections[s.section].code;
+            u8(o, s.bind != B_LOCAL ? 2 : codeLabel ? 6 : 3);
+            u8(o, 0);
+        }
+    };
     for (size_t i = 0; i < nsec; i++) {
         const Section &s = u.sections[i];
         name8(out, s.name, strings);
@@ -147,29 +185,26 @@ bool CoffWriter::write(const Unit &u, const std::string &path, std::string &err)
         u16(out, 0);
         u8(out, 3);
         u8(out, 1);
+        /* the section definition: length, relocations, line numbers, checksum, and for a COMDAT
+           the selection - 2 (ANY) folded on the key that follows, 5 (ASSOCIATIVE) with the
+           number of the section it belongs to */
         u32(out, (unsigned long)s.bytes.size());
         u16(out, s.relocs.size() >= 0xFFFF ? 0xFFFF : (unsigned)s.relocs.size());
         u16(out, 0);
         u32(out, 0);
-        u16(out, 0);
+        u16(out, assocOf[i] >= 0 ? (unsigned)(assocOf[i] + 1) : 0);
+        u8(out, s.comdat < 0 ? 0 : s.associative ? 5 : 2);
         u8(out, 0);
-        u8(out, 0);
         u16(out, 0);
+        if (keyOf[i] >= 0) Sym::put(out, strings, u, u.symbols[keyOf[i]]);
     }
     for (size_t i = 0; i < u.symbols.size(); i++) {
         if (index[i] < 0)
             continue;
-        const Symbol &s = u.symbols[i];
-        name8(out, s.name, strings);
-        u32(out, s.defined || s.common ? (unsigned long)s.value : 0);
-        u16(out, s.defined ? (unsigned)(s.section + 1) : 0);
-        /* an extern carries no type, whatever it was declared as; a label in a code section
-           is class Label (6), a data name or a private PROC Static (3) */
-        u16(out, s.function && s.defined ? 0x20 : 0);
-        const bool codeLabel = s.defined && !s.function && s.type == SYM_NEAR &&
-                               u.sections[s.section].code;
-        u8(out, s.bind != B_LOCAL ? 2 : codeLabel ? 6 : 3);
-        u8(out, 0);
+        bool isKey = false;
+        for (size_t k = 0; k < nsec && !isKey; k++) isKey = keyOf[k] == (int)i;
+        if (isKey) continue;
+        Sym::put(out, strings, u, u.symbols[i]);
     }
     u32(out, (unsigned long)(strings.size() + 4));
     out.insert(out.end(), strings.begin(), strings.end());

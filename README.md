@@ -33,6 +33,9 @@ Visual Studio 2022: open the folder (CMakeLists.txt), or add `src/*.cpp` to a co
 
 ## Use
 
+The assembler also takes ml64's own command line - `asm /nologo /c /Fo out.obj in.asm` - so a build
+that ran ml64 runs this instead by naming it: cxx1's `CXX1_AS`, and RIDE's settings.
+
 ```
 asm -t x64 file.asm -o file.obj
 asm -t x64 a.asm b.asm c.asm      each file on its own thread, a.obj b.obj c.obj
@@ -57,6 +60,9 @@ and the like (ignored), `name PROC [PUBLIC|PRIVATE] [FRAME]` with `.PUSHREG`, `.
 RUNTIME_FUNCTION to `.pdata`, relocated against the PROC and one Static `$xdatasym` exactly as ml64 writes them),
 `name PROC` / `name ENDP`, `name EQU expr`, `ALIGN n` (a power of two up to the section's alignment, as ml64's A2189 requires), `ORG $+n`, `DB DW DD DQ REAL4 REAL8` with strings (a doubled quote is one quote, `DW 'ab'` the constant 6162h), reals (`DQ 1.5`, `DD -2.5`, stored as their float or double bits), `?`, `n DUP (x)`,
 `COMM name:type[:count]` (an external the linker allocates, its size in the symbol's value) and `EXTERNDEF name:type` (public if the file defines it, extern if it only uses it),
+`name SEGMENT ... COMDAT(sym)` (a COMDAT section folded on `sym`, which is defined inside it) and
+`... ASSOCIATIVE(sym)` (kept with the section `sym`'s COMDAT opened) - what a C++ object needs for its
+inline functions, template instantiations and vtables and what ml64 has no syntax for; see tests/comdat,
 labels as `DD`/`DQ` values (`DQ v+8` keeps the addend in place, as COFF does), `DD IMAGEREL label`
 (ADDR32NB), and label differences `DB L2-L1` (folded when both are known, written at the end otherwise).
 

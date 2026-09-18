@@ -26,5 +26,12 @@ b02-ab.exe
 echo b02 mine+ml64 rc=%errorlevel% (46 expected)
 b02-ba.exe
 echo b02 ml64+mine rc=%errorlevel% (46 expected)
+rem  COMDAT: two objects each defining twice, helper and table fold at link and run
+%ASM% -t x64 ..\..\tests\comdat\c1.asm -o c1.obj || set fail=1
+%ASM% -t x64 ..\..\tests\comdat\c2.asm -o c2.obj || set fail=1
+link /nologo /subsystem:console /out:c.exe c1.obj c2.obj %LIBS% > c.link 2>&1 || set fail=1
+c.exe
+echo comdat rc=%errorlevel% (5 expected)
+dumpbin /nologo /symbols c1.obj | findstr /C:"selection"
 if %fail%==1 (echo LINK-FAILED & exit /b 1)
 echo LINK-DONE

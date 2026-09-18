@@ -32,6 +32,12 @@ struct Section {
     bool readonly;
     bool info;          /* linker directives (.drectve): not loaded */
     int align;          /* 1, 2, 4, ... 8192 */
+    /* COMDAT: a section of its own, folded by the linker on `comdat`'s symbol (SELECT_ANY), or
+       kept with the section that symbol's COMDAT opened (SELECT_ASSOCIATIVE) - what a C++
+       object needs for an inline function, a template instantiation or a vtable, and what
+       ml64 has no syntax for; here `SEGMENT ... COMDAT(sym)` and `ASSOCIATIVE(sym)` */
+    int comdat;         /* the key symbol, or -1 */
+    bool associative;
     std::vector<unsigned char> bytes;
     std::vector<Reloc> relocs;
 };
@@ -98,7 +104,8 @@ public:
     void begin_pass(int n);
     bool moved() const;
     void error(const std::string &msg);
-    int section(const std::string &name, bool code, bool bss, bool readonly, int align);
+    int section(const std::string &name, bool code, bool bss, bool readonly, int align,
+                int comdat = -1, bool associative = false);
     Section *cur();
     unsigned long here();
 

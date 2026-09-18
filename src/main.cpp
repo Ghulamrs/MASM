@@ -3,6 +3,7 @@
 #include "mscoff.h"
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <thread>
 
 static std::string object_name(const std::string &in)
@@ -34,7 +35,8 @@ static void job(Assembler *a, bool *ok)
 
 static int usage()
 {
-    fprintf(stderr, "usage: asm -t x64 file.asm... [-o out.obj]\n");
+    fprintf(stderr, "usage: asm -t x64 file.asm... [-o out.obj]\n"
+                    "       asm /c [/nologo] [/Fo out.obj] file.asm      (ml64's spelling, x64)\n");
     return 2;
 }
 
@@ -46,6 +48,26 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) target = argv[++i];
         else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) output = argv[++i];
+        else if (argv[i][0] == '/' && strchr(argv[i] + 1, '/') == 0 && strchr(argv[i] + 1, '\\') == 0 &&
+                 !std::ifstream(argv[i]).good()) {
+            /* ml64's own options, so that a build which ran `ml64 /nologo /c /Fo x.obj x.asm`
+               runs this instead: /c and /nologo say nothing here, /Fo names the object, the
+               listing and warning switches are taken and ignored. A Unix path also starts
+               with a slash, and is one when it has another slash in it or exists */
+            target = "x64";
+            if (strncmp(argv[i], "/Fo", 3) == 0) {
+                if (argv[i][3] != '\0') output = argv[i] + 3;
+                else if (i + 1 < argc) output = argv[++i];
+                else return usage();
+            } else if (strcmp(argv[i], "/c") != 0 && strcmp(argv[i], "/nologo") != 0 &&
+                       strncmp(argv[i], "/W", 2) != 0 && strncmp(argv[i], "/Fl", 3) != 0 &&
+                       strncmp(argv[i], "/Zi", 3) != 0 && strncmp(argv[i], "/Cp", 3) != 0 &&
+                       strncmp(argv[i], "/Cx", 3) != 0 && strncmp(argv[i], "/Zd", 3) != 0 &&
+                       strncmp(argv[i], "/Sa", 3) != 0 && strncmp(argv[i], "/Ta", 3) != 0) {
+                fprintf(stderr, "asm: option %s is not one this assembler takes\n", argv[i]);
+                return usage();
+            }
+        }
         else if (argv[i][0] == '-') return usage();
         else inputs.push_back(argv[i]);
     }

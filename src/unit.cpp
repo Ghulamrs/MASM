@@ -53,10 +53,13 @@ void Unit::error(const std::string &msg)
     errors.push_back(buf + msg);
 }
 
-int Unit::section(const std::string &name, bool code, bool bss, bool readonly, int align)
+int Unit::section(const std::string &name, bool code, bool bss, bool readonly, int align,
+                  int comdat, bool associative)
 {
+    /* a plain section is one per name; a COMDAT is one per key, however many share the name */
     for (size_t i = 0; i < sections.size(); i++)
-        if (sections[i].name == name) {
+        if (sections[i].name == name && sections[i].comdat == comdat &&
+            sections[i].associative == associative) {
             current = (int)i;
             return current;
         }
@@ -67,6 +70,8 @@ int Unit::section(const std::string &name, bool code, bool bss, bool readonly, i
     s.readonly = readonly;
     s.info = false;
     s.align = align;
+    s.comdat = comdat;
+    s.associative = associative;
     sections.push_back(s);
     current = (int)sections.size() - 1;
     return current;
