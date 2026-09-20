@@ -26,10 +26,23 @@ Still to come: `c6x_parse.cpp`, `c6x_encode.cpp` (C6000 target) and `elf.cpp` (T
 Mac / Linux:
 
 ```
-mkdir -p build && g++ -std=c++14 -O2 -pthread src/*.cpp -o build/asm
+make                      build/masm.exe, -Wall -Wextra -Werror -pedantic, objects under ../build/MASM
+make BINDIR=dir OBJDIR=d  the program and its objects elsewhere (what RIDE's workspace.mk does)
+mkdir -p build && g++ -std=c++14 -O2 -pthread src/*.cpp -o build/asm     (by hand, the old way)
 ```
 
-Visual Studio 2022: open the folder (CMakeLists.txt), or add `src/*.cpp` to a console project with C++14 selected.
+Visual Studio 2022: `masm.vcxproj` at the root (written by RIDE's `tools/make-projects.py`,
+the same shape as asm6x's), or open the folder (CMakeLists.txt), or add `src/*.cpp` to a
+console project with C++14 selected.
+
+## In RIDE
+
+RIDE 4.0's workspace builds `masm.exe` into its `bin` beside `asm6x.exe` (make-projects.py
+knows it as the seventh product, on all three machines), and the Windows installer names it
+in the installation's `settings.json` - `"assembler": "bin/masm.exe"`, relative to that file -
+so every x86_64-windows build of the three compilers assembles through it in place of ml64
+(`CC1_AS`, `CXX1_AS` and `SHC_AS` in their environment, and cxx1i told `-masm=masm`).
+Tools > Assembler for x86_64-windows... changes or clears it.
 
 ## Use
 

@@ -1,1 +1,4 @@
 build/
+.DS_Store
+masm.xcodeproj/project.xcworkspace/
+masm.xcodeproj/xcuserdata/

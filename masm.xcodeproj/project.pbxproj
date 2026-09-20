@@ -1,0 +1,291 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3A703F86F05052BE344C72E2 /* src/assembler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AB86E930EDB2DB4354CE4658 /* src/assembler.cpp */; };
+		3350F7B6F4AA3FEAF0B35A75 /* src/expr.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7E24D42904DFD772FF1641EF /* src/expr.cpp */; };
+		0F472DA9A60C127AD8BF1256 /* src/lexer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 06133D1EF09B31BF2A427A5B /* src/lexer.cpp */; };
+		385EBA5E77C307E551E6A408 /* src/main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 796B48B67A423D6E83216693 /* src/main.cpp */; };
+		C4AC36BAFED9DF315701DAF4 /* src/mscoff.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80CAC968EFB72F1DBC12B495 /* src/mscoff.cpp */; };
+		3D86BD09D815E0364C9D45F7 /* src/unit.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 08B2E30FFFF7D4A4C5590B9A /* src/unit.cpp */; };
+		4696E6D771AB936AF6A689F3 /* src/x64_encode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F5D1A49E645F04AE371450AB /* src/x64_encode.cpp */; };
+		66CA8F1D392A7FEB76373F76 /* src/x64_parse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3CC6044FBC26B6DC1F3B0FA0 /* src/x64_parse.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AB86E930EDB2DB4354CE4658 /* src/assembler.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = src/assembler.cpp; sourceTree = "<group>"; };
+		7E24D42904DFD772FF1641EF /* src/expr.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = src/expr.cpp; sourceTree = "<group>"; };
+		06133D1EF09B31BF2A427A5B /* src/lexer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = src/lexer.cpp; sourceTree = "<group>"; };
+		796B48B67A423D6E83216693 /* src/main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = src/main.cpp; sourceTree = "<group>"; };
+		80CAC968EFB72F1DBC12B495 /* src/mscoff.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = src/mscoff.cpp; sourceTree = "<group>"; };
+		08B2E30FFFF7D4A4C5590B9A /* src/unit.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = src/unit.cpp; sourceTree = "<group>"; };
+		F5D1A49E645F04AE371450AB /* src/x64_encode.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = src/x64_encode.cpp; sourceTree = "<group>"; };
+		3CC6044FBC26B6DC1F3B0FA0 /* src/x64_parse.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = src/x64_parse.cpp; sourceTree = "<group>"; };
+		14117D730AF965E076742353 /* src/asm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = src/asm.h; sourceTree = "<group>"; };
+		F192F0D5C16FFCC725878407 /* src/mscoff.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = src/mscoff.h; sourceTree = "<group>"; };
+		52D8F18874F795822B73BB12 /* src/x64.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = src/x64.h; sourceTree = "<group>"; };
+		3F5D281E29DB207A68C5DF5F /* masm.exe */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = masm.exe; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		427FAC9A95F03B6B373A6A83 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C31FA3C55EB673DBC88AC12F = {
+			isa = PBXGroup;
+			children = (
+				A89807E79BA3F3381208787E /* Sources */,
+				E3FA444A1BBA5B68C94077D7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A89807E79BA3F3381208787E /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				AB86E930EDB2DB4354CE4658 /* src/assembler.cpp */,
+				7E24D42904DFD772FF1641EF /* src/expr.cpp */,
+				06133D1EF09B31BF2A427A5B /* src/lexer.cpp */,
+				796B48B67A423D6E83216693 /* src/main.cpp */,
+				80CAC968EFB72F1DBC12B495 /* src/mscoff.cpp */,
+				08B2E30FFFF7D4A4C5590B9A /* src/unit.cpp */,
+				F5D1A49E645F04AE371450AB /* src/x64_encode.cpp */,
+				3CC6044FBC26B6DC1F3B0FA0 /* src/x64_parse.cpp */,
+				14117D730AF965E076742353 /* src/asm.h */,
+				F192F0D5C16FFCC725878407 /* src/mscoff.h */,
+				52D8F18874F795822B73BB12 /* src/x64.h */,
+			);
+			name = Sources;
+			sourceTree = "<group>";
+		};
+		E3FA444A1BBA5B68C94077D7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3F5D281E29DB207A68C5DF5F /* masm.exe */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6A503C59EA2D76B27E13F658 /* masm.exe */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8A3E344FFC670D079E3403BA;
+			buildPhases = (
+				D9E63F366595D06413AEBC2C /* Sources */,
+				427FAC9A95F03B6B373A6A83 /* Frameworks */,
+				063BD5FFFC654C2165C742BC /* put the finished program in RStudio's directory */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = masm.exe;
+			productName = masm.exe;
+			productReference = 3F5D281E29DB207A68C5DF5F /* masm.exe */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0B04512AD2CCC6DE41899413 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 803816120C3B3E32646C2AE8;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = C31FA3C55EB673DBC88AC12F;
+			productRefGroup = E3FA444A1BBA5B68C94077D7 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6A503C59EA2D76B27E13F658 /* masm.exe */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		063BD5FFFC654C2165C742BC /* put the finished program in RStudio's directory */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "put the finished program in RStudio's directory";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\ndest=\"$SRCROOT/../RIDE\"\nmkdir -p \"$dest\"\ncp -f \"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME\" \"$dest/.$PRODUCT_NAME.new\"\nmv -f \"$dest/.$PRODUCT_NAME.new\" \"$dest/$PRODUCT_NAME\"\ncodesign --force --sign - \"$dest/$PRODUCT_NAME\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D9E63F366595D06413AEBC2C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3A703F86F05052BE344C72E2 /* src/assembler.cpp in Sources */,
+				3350F7B6F4AA3FEAF0B35A75 /* src/expr.cpp in Sources */,
+				0F472DA9A60C127AD8BF1256 /* src/lexer.cpp in Sources */,
+				385EBA5E77C307E551E6A408 /* src/main.cpp in Sources */,
+				C4AC36BAFED9DF315701DAF4 /* src/mscoff.cpp in Sources */,
+				3D86BD09D815E0364C9D45F7 /* src/unit.cpp in Sources */,
+				4696E6D771AB936AF6A689F3 /* src/x64_encode.cpp in Sources */,
+				66CA8F1D392A7FEB76373F76 /* src/x64_parse.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		6B29C4636D79B19A9B277891 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				OBJROOT = "$(TMPDIR)/rstudio-xcode";
+				SYMROOT = "$(TMPDIR)/rstudio-xcode";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_IMPLICIT_SIGN_CONVERSION = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_NAME = masm.exe;
+				SDKROOT = macosx;
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/src";
+				WARNING_CFLAGS = (
+					"-Wall",
+					"-Wextra",
+					"-pedantic",
+				);
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_OPTIMIZATION_LEVEL = 0;
+			};
+			name = Debug;
+		};
+		C0FBE703D4639482A586A135 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				OBJROOT = "$(TMPDIR)/rstudio-xcode";
+				SYMROOT = "$(TMPDIR)/rstudio-xcode";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_IMPLICIT_SIGN_CONVERSION = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_NAME = masm.exe;
+				SDKROOT = macosx;
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/src";
+				WARNING_CFLAGS = (
+					"-Wall",
+					"-Wextra",
+					"-pedantic",
+				);
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_OPTIMIZATION_LEVEL = 2;
+			};
+			name = Release;
+		};
+		C0880FD36985541829C378E8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				OBJROOT = "$(TMPDIR)/rstudio-xcode";
+				SYMROOT = "$(TMPDIR)/rstudio-xcode";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_IMPLICIT_SIGN_CONVERSION = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_NAME = masm.exe;
+				SDKROOT = macosx;
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/src";
+				WARNING_CFLAGS = (
+					"-Wall",
+					"-Wextra",
+					"-pedantic",
+				);
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_OPTIMIZATION_LEVEL = 0;
+			};
+			name = Debug;
+		};
+		D0885166512E15DB0FCF326B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				OBJROOT = "$(TMPDIR)/rstudio-xcode";
+				SYMROOT = "$(TMPDIR)/rstudio-xcode";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_IMPLICIT_SIGN_CONVERSION = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_NAME = masm.exe;
+				SDKROOT = macosx;
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/src";
+				WARNING_CFLAGS = (
+					"-Wall",
+					"-Wextra",
+					"-pedantic",
+				);
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_OPTIMIZATION_LEVEL = 2;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		803816120C3B3E32646C2AE8 /* project */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B29C4636D79B19A9B277891 /* Debug */,
+				C0FBE703D4639482A586A135 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8A3E344FFC670D079E3403BA /* target */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0880FD36985541829C378E8 /* Debug */,
+				D0885166512E15DB0FCF326B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0B04512AD2CCC6DE41899413 /* Project object */;
+}
