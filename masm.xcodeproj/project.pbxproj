@@ -86,7 +86,7 @@
 			buildPhases = (
 				D9E63F366595D06413AEBC2C /* Sources */,
 				427FAC9A95F03B6B373A6A83 /* Frameworks */,
-				063BD5FFFC654C2165C742BC /* put the finished program in RStudio's directory */,
+				063BD5FFFC654C2165C742BC /* put the finished program in RIDE's directory */,
 			);
 			buildRules = (
 			);
@@ -124,7 +124,7 @@
 /* End PBXProject section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		063BD5FFFC654C2165C742BC /* put the finished program in RStudio's directory */ = {
+		063BD5FFFC654C2165C742BC /* put the finished program in RIDE's directory */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -132,7 +132,7 @@
 			);
 			inputPaths = (
 			);
-			name = "put the finished program in RStudio's directory";
+			name = "put the finished program in RIDE's directory";
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -164,15 +164,15 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				OBJROOT = "$(TMPDIR)/rstudio-xcode";
-				SYMROOT = "$(TMPDIR)/rstudio-xcode";
+				OBJROOT = "$(TMPDIR)/ride-xcode";
+				SYMROOT = "$(TMPDIR)/ride-xcode";
 				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_WARN_IMPLICIT_SIGN_CONVERSION = NO;
 				CODE_SIGN_STYLE = Automatic;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
-				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				PRODUCT_NAME = masm.exe;
 				SDKROOT = macosx;
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/src";
@@ -190,15 +190,15 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				OBJROOT = "$(TMPDIR)/rstudio-xcode";
-				SYMROOT = "$(TMPDIR)/rstudio-xcode";
+				OBJROOT = "$(TMPDIR)/ride-xcode";
+				SYMROOT = "$(TMPDIR)/ride-xcode";
 				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_WARN_IMPLICIT_SIGN_CONVERSION = NO;
 				CODE_SIGN_STYLE = Automatic;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
-				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				PRODUCT_NAME = masm.exe;
 				SDKROOT = macosx;
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/src";
@@ -216,15 +216,15 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				OBJROOT = "$(TMPDIR)/rstudio-xcode";
-				SYMROOT = "$(TMPDIR)/rstudio-xcode";
+				OBJROOT = "$(TMPDIR)/ride-xcode";
+				SYMROOT = "$(TMPDIR)/ride-xcode";
 				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_WARN_IMPLICIT_SIGN_CONVERSION = NO;
 				CODE_SIGN_STYLE = Automatic;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
-				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				PRODUCT_NAME = masm.exe;
 				SDKROOT = macosx;
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/src";
@@ -242,15 +242,15 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				OBJROOT = "$(TMPDIR)/rstudio-xcode";
-				SYMROOT = "$(TMPDIR)/rstudio-xcode";
+				OBJROOT = "$(TMPDIR)/ride-xcode";
+				SYMROOT = "$(TMPDIR)/ride-xcode";
 				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_WARN_IMPLICIT_SIGN_CONVERSION = NO;
 				CODE_SIGN_STYLE = Automatic;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
-				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				PRODUCT_NAME = masm.exe;
 				SDKROOT = macosx;
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/src";
