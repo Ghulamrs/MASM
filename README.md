@@ -41,13 +41,13 @@ RIDE 4.0's workspace builds `masm.exe` into its `bin` beside `asm6x.exe` (make-p
 knows it as the seventh product, on all three machines), and the Windows installer names it
 in the installation's `settings.json` - `"assembler": "bin/masm.exe"`, relative to that file -
 so every x86_64-windows build of the three compilers assembles through it in place of ml64
-(`CC1_AS`, `CXX1_AS` and `SHC_AS` in their environment, and cxx1i told `-masm=masm`).
+(`C90_AS`, `CPP11_AS` and `SHALIMAR_AS` in their environment, and cpp11 told `-masm=masm`).
 Tools > Assembler for x86_64-windows... changes or clears it.
 
 ## Use
 
 The assembler also takes ml64's own command line - `asm /nologo /c /Fo out.obj in.asm` - so a build
-that ran ml64 runs this instead by naming it: cxx1's `CXX1_AS`, and RIDE's settings.
+that ran ml64 runs this instead by naming it: cxx1's `CPP11_AS`, and RIDE's settings.
 
 ```
 asm -t x64 file.asm -o file.obj

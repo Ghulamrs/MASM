@@ -1,5 +1,5 @@
 ; a23: forward short jumps behind jumps that grow between passes - each je must stay rel8
-; while the jmp to the end becomes rel32 (shci's if_chain: ml64 keeps the je short). It
+; while the jmp to the end becomes rel32 (shalimar's if_chain: ml64 keeps the je short). It
 ; takes fifty widened jumps ahead of a je before the stale distance leaves rel8's range
 EXTERN shm_line:PROC
 EXTERN shm_int_eq:PROC

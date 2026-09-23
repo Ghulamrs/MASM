@@ -55,7 +55,7 @@ int main(int argc, char **argv)
                runs this instead: /c and /nologo say nothing here, /Fo names the object, the
                listing and warning switches are taken and ignored. A Unix path also starts
                with a slash, and is one when it has another slash in it or exists - except
-               that /Fo with the path attached, as shci writes it, has slashes of its own */
+               that /Fo with the path attached, as shalimar writes it, has slashes of its own */
             target = "x64";
             if (strncmp(argv[i], "/Fo", 3) == 0) {
                 if (argv[i][3] != '\0') output = argv[i] + 3;

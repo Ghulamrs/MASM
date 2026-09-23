@@ -1,4 +1,4 @@
-; a24: the type names as data directives, and DUP (0) in a BSS segment - shci's globals - beside
+; a24: the type names as data directives, and DUP (0) in a BSS segment - shalimar's globals - beside
 ; the same words as operand sizes, which they stay when PTR follows
 _BSS    SEGMENT
 shm_globals QWORD 2 DUP (0)
