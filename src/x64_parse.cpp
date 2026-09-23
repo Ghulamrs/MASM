@@ -69,7 +69,7 @@ static int data_width(const std::string &w)
     return 0;
 }
 
-/* the type names ml64 takes as data directives too - shci writes `shm_globals QWORD 2 DUP (0)`
+/* the type names ml64 takes as data directives too - shalimar writes `shm_globals QWORD 2 DUP (0)`
    - which they are unless PTR follows, as in `mov DWORD PTR [r11], eax` */
 static int type_data_width(const std::vector<Token> &t, size_t i)
 {
@@ -175,7 +175,7 @@ bool X64Target::resolve_here(const Unit &u, const Fixup &f, const Symbol &s, lon
    A forward target's value is the previous pass's, so the distance to it is measured from
    where this jump was in that pass, not where it is now: with jumps before it widened in
    between, the two differ by their growth, and a jump in easy reach read as out of it and
-   widened for good - shci's if_chain had 707 bytes of that, all Jcc rel32 that ml64 made rel8 */
+   widened for good - shalimar's if_chain had 707 bytes of that, all Jcc rel32 that ml64 made rel8 */
 int X64Target::jump_width(Unit &u, const Operand &o)
 {
     size_t j = jn++;
@@ -813,7 +813,7 @@ void X64Target::data(Unit &u, const std::vector<Token> &t, size_t from, int widt
         }
         size_t dup = dup_at(t, a, b);
         /* in a BSS section a value must be ? or a literal 0 - ml64 takes `QWORD 2 DUP (0)`
-           there, which is how shci spells its globals - and either way nothing is stored */
+           there, which is how shalimar spells its globals - and either way nothing is stored */
         if (sec->bss) {
             size_t v = dup < b ? dup + 2 : a;
             bool zero = (dup < b ? dup + 4 == b : b - a == 1) &&
