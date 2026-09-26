@@ -1,0 +1,19 @@
+©2026 G. R. Akhtar - masm, an x86-64 assembler (ml64 compatible)
+Release seal, version 1.0, sealed 26-09-2026
+Written by tools/seal; check it with `tools/seal check`.
+CRC32  size  file - 14 files, seal 306906C4
+------------------------------------------------------------------
+EC9C504A       288  CMakeLists.txt
+20649E27      1060  Makefile
+FB7FDB06      2930  masm.vcxproj
+913ED54D      6265  src/asm.h
+FA860D16      1971  src/assembler.cpp
+468FC6C8     10725  src/expr.cpp
+EF364D26      4750  src/lexer.cpp
+1833ADE9      4754  src/main.cpp
+21B6B4FC      8548  src/mscoff.cpp
+0D3BC20C       184  src/mscoff.h
+4FB36994      7988  src/unit.cpp
+78B02C14      3646  src/x64.h
+0136D1E6     31028  src/x64_encode.cpp
+DC60623C     45193  src/x64_parse.cpp

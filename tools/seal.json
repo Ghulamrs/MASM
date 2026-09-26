@@ -1,0 +1,2 @@
+{"name": "masm", "version": "1.0", "banner": "©2026 G. R. Akhtar - masm, an x86-64 assembler (ml64 compatible)",
+ "dirs": ["src"], "files": ["Makefile", "CMakeLists.txt", "masm.vcxproj"]}
