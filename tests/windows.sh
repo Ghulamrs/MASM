@@ -16,17 +16,23 @@ W=$(echo "$ROOT" | sed 's|/|\\|g')        # the same place in cmd's spelling
 ssh -n -o BatchMode=yes "$BOX" "if not exist $W mkdir $W" > /dev/null || exit 1
 scp -q "$T/tree.tgz" "$BOX:$ROOT/tree.tgz" || exit 1
 ssh -n -o BatchMode=yes "$BOX" "cd /d $W & tar xzf tree.tgz & $W\\tests\\windows\\build.cmd $W" | grep -E "warning|error|BUILD" || exit 1
-# the encoding files, assembled there: the cl build must make the same objects as the clang one
-ssh -n -o BatchMode=yes "$BOX" "$W\\tests\\windows\\enc.cmd $W" | grep -v ENC-DONE
-mkdir -p "$T/enc"
-scp -q "$BOX:$ROOT/build/enc/*.obj" "$T/enc/" || exit 1
+# The encoding files, assembled there - the cl build must make the same objects as the clang one -
+# while the Mac assembles its own and the box's link checks run: three things at once, not in turn.
+mkdir -p "$T/enc" && rm -f "${T:?}"/enc/*.obj
+ssh -n -o BatchMode=yes "$BOX" "$W\\tests\\windows\\link.cmd $W" > "$T/link.log" 2>&1 &
+( ssh -n -o BatchMode=yes "$BOX" "$W\\tests\\windows\\enc.cmd $W" | grep -v ENC-DONE
+  scp -q "$BOX:$ROOT/build/enc/*.obj" "$T/enc/" ) &
+for f in tests/enc/*.asm; do
+    "$ASM" -t x64 "$f" -o "$T/enc/$(basename "$f" .asm)-mac.obj" &
+done
+wait
 same=0; differ=0
 for f in tests/enc/*.asm; do
     b=$(basename "$f" .asm)
-    "$ASM" -t x64 "$f" -o "$T/enc/$b-mac.obj" && cmp -s "$T/enc/$b-mac.obj" "$T/enc/$b.obj" && same=$((same + 1)) || { differ=$((differ + 1)); echo "DIFFER $b: cl and clang builds disagree"; }
+    [ -f "$T/enc/$b-mac.obj" ] && cmp -s "$T/enc/$b-mac.obj" "$T/enc/$b.obj" && same=$((same + 1)) || { differ=$((differ + 1)); echo "DIFFER $b: cl and clang builds disagree"; }
 done
 echo "windows.sh: $same encoding objects identical from both builds, $differ differ"
-ssh -n -o BatchMode=yes "$BOX" "$W\\tests\\windows\\link.cmd $W" | grep -vE "^\s*$"
+grep -vE "^\s*$" "$T/link.log"
 if [ -n "$1" ]; then
     corpus=$1
     name=$(basename "$corpus")

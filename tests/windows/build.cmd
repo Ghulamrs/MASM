@@ -10,7 +10,7 @@ if not exist build mkdir build
 cd build
 if exist asm-win.exe del asm-win.exe
 if exist *.obj del /q *.obj
-cl /nologo /std:c++14 /W4 /permissive- /O2 /EHsc /Fe:asm-win.exe ..\src\*.cpp > cl.log 2>&1
+cl /nologo /MP /std:c++14 /W4 /permissive- /O2 /EHsc /Fe:asm-win.exe ..\src\*.cpp > cl.log 2>&1
 type cl.log
 if not exist asm-win.exe (echo BUILD-FAILED & exit /b 1)
 echo BUILD-DONE
