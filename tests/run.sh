@@ -32,5 +32,8 @@ done
 "$ASM" -t x64 tests/basic.asm tests/basic.asm > "$T/dup.msg" 2>&1 && { echo "two jobs writing one object were not refused"; fail=1; }
 grep -q "would both write" "$T/dup.msg" || { echo "duplicate output: $(cat "$T/dup.msg")"; fail=1; }
 
+# 4. cpp11's own output: exception tables, throw records, RTTI and COMDAT data (tests/cpp11.sh)
+T="$T/cpp11" ASM="$ASM" sh tests/cpp11.sh || fail=1
+
 [ $fail = 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $fail
