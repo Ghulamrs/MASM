@@ -1,0 +1,11 @@
+cpp11's output as this assembler's input (review V6, 2026-10-08). Four programs from cpp11's
+tests/cases - try-catch, throw-class, template-static-member-on-use, handler-exit-ms - written by
+
+    cpp11 -S -arch x86_64-windows -masm=masm  <case>.cpp -o <case>.asm        (COMDAT dialect)
+    cpp11 -S -arch x86_64-windows -masm=ml64  <case>.cpp -o <case>.ml64.asm   (ml64's dialect)
+
+at C++Optimize branch review/f-windows. <case>.ml.code is ml64 14.44's code bytes for the .ml64.asm
+(tests/coffcode.py over its object), <case>.expected the program's output, cpp11's .expected.
+tests/cpp11.sh assembles both dialects here and compares the first with ml64; tests/windows/cpp11.cmd
+records ml.code again and links and runs the COMDAT dialect with link.exe. Regenerate all three
+whenever cpp11's MASM spelling changes - a difference here is a question for that spelling first.
