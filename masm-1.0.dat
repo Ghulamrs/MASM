@@ -1,5 +1,5 @@
 ©2026 G. R. Akhtar - masm, an x86-64 assembler (ml64 compatible)
-Release seal, version 1.0, sealed 05-10-2026
+Release seal, version 1.0, sealed 13-10-2026
 Written by tools/seal; check it with `tools/seal check`.
 CRC32  size  file - 11 files, seal 5E4155D7
 ------------------------------------------------------------------
@@ -15,4 +15,4 @@ EF364D26      4750  src/lexer.cpp
 0136D1E6     31028  src/x64_encode.cpp
 DC60623C     45193  src/x64_parse.cpp
 ------------------------------------------------------------------
-Sealed on 05-10-2026
+Sealed on 13-10-2026
